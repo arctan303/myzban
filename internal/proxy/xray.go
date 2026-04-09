@@ -39,7 +39,6 @@ type xrayLog struct {
 
 type xrayAPI struct {
 	Tag      string   `json:"tag"`
-	Listen   string   `json:"listen"`
 	Services []string `json:"services"`
 }
 
@@ -170,7 +169,6 @@ func (x *XrayManager) GenerateConfig(users []*db.User) error {
 		Log: xrayLog{Loglevel: "warning"},
 		API: xrayAPI{
 			Tag:      "api",
-			Listen:   x.cfg.XrayAPIAddr,
 			Services: []string{"StatsService", "HandlerService"},
 		},
 		Policy: xrayPolicy{
