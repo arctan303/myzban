@@ -327,22 +327,3 @@ func parseXrayStats(output string) map[string]*TrafficData {
 	return result
 }
 
-// GenerateClientConfig generates Clash YAML config for a specific user
-func (x *XrayManager) GenerateClientConfig(user *db.User, nodeInfo *db.NodeInfo) string {
-	return fmt.Sprintf(`  - name: "%s-TCP"
-    type: vless
-    server: %s
-    port: %d
-    uuid: %s
-    udp: true
-    tls: true
-    network: tcp
-    servername: %s
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: %s
-      short-id: %s`,
-		nodeInfo.ServerIP, nodeInfo.ServerIP, x.cfg.VLESSPort,
-		user.UUID, x.cfg.DestDomain,
-		nodeInfo.XrayPubKey, nodeInfo.ShortID)
-}

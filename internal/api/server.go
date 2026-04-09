@@ -50,9 +50,6 @@ func NewServer(
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	// --- Public endpoints (no auth) ---
-	// Subscription: GET /sub/{token} — user fetches their own config
-	mux.HandleFunc("/sub/", s.handleSubscription)
 	// Health check
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("pong"))
@@ -124,52 +121,7 @@ func withCORS(h http.Handler) http.Handler {
 	})
 }
 
-// --- Public Handlers ---
 
-// handleSubscription serves per-user Clash YAML config via their sub token
-// GET /sub/{token}
-func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	token := strings.TrimPrefix(r.URL.Path, "/sub/")
-	if token == "" {
-		http.NotFound(w, r)
-		return
-	}
-
-	u, err := s.db.GetUserBySubToken(token)
-	if err != nil || u == nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	// Check traffic limit
-	if u.TrafficLimit > 0 && (u.TrafficUp+u.TrafficDown) >= u.TrafficLimit {
-		http.Error(w, "traffic limit exceeded", http.StatusForbidden)
-		return
-	}
-
-	clientCfg, err := s.userService.GetClientConfig(u.Username)
-	if err != nil {
-		http.Error(w, "no proxy config available", http.StatusServiceUnavailable)
-		return
-	}
-
-	// Return full Clash config with proxies
-	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
-	w.Header().Set("Content-Disposition", "attachment; filename=\"clash-config.yaml\"")
-	w.Header().Set("Profile-Update-Interval", "24")
-
-	fmt.Fprintf(w, "# ProxyNode Manager - %s\n", u.Username)
-	fmt.Fprintf(w, "# Generated for user: %s\n\n", u.Username)
-	fmt.Fprintln(w, "proxies:")
-	fmt.Fprintln(w, clientCfg)
-}
-
-// --- Admin Handlers ---
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -397,15 +349,6 @@ func (s *Server) handleUserByPath(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jsonResp(w, http.StatusOK, map[string]string{"status": "disabled"})
-
-	case action == "config" && r.Method == http.MethodGet:
-		cfg, err := s.userService.GetClientConfig(username)
-		if err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		w.Header().Set("Content-Type", "text/yaml")
-		w.Write([]byte(cfg))
 
 	case action == "traffic" && r.Method == http.MethodGet:
 		logs, err := s.userService.GetTrafficLogs(username, 100)

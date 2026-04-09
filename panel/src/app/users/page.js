@@ -123,10 +123,15 @@ export default function UsersPage() {
   const viewUserInfo = async (user) => {
     setSelectedUser(user);
     try {
-      const config = await nodeRequest(selectedNode.id, 'GET', `/api/v1/users/${user.username}/config`);
-      setUserConfig(typeof config === 'string' ? config : JSON.stringify(config, null, 2));
+      // Fetch YAML directly from our panel's API
+      const res = await fetch(`/api/sub/${selectedNode.id}/${user.sub_token}`);
+      if (res.ok) {
+        setUserConfig(await res.text());
+      } else {
+        setUserConfig('Error: ' + await res.text());
+      }
     } catch (e) {
-      setUserConfig('Failed to load config');
+      setUserConfig('Failed to load config: ' + e.message);
     }
     setShowInfoModal(true);
   };
@@ -280,8 +285,8 @@ export default function UsersPage() {
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Subscription URL</label>
                   <div className="copy-text" style={{ maxWidth: '100%' }}
-                    onClick={() => copyToClipboard(`http://${selectedNode?.status?.server_ip}:9090/sub/${selectedUser.sub_token}`)}>
-                    http://{selectedNode?.status?.server_ip}:9090/sub/{selectedUser.sub_token}
+                    onClick={() => copyToClipboard(`${window.location.origin}/api/sub/${selectedNode?.id}/${selectedUser.sub_token}`)}>
+                    {window.location.origin}/api/sub/{selectedNode?.id}/{selectedUser.sub_token}
                   </div>
                 </div>
               )}
@@ -300,14 +305,14 @@ export default function UsersPage() {
                   maxHeight: '300px',
                   cursor: 'pointer',
                   marginTop: '6px',
-                }} onClick={() => copyToClipboard('proxies:\n' + userConfig)}>
-                  proxies:{'\n'}{userConfig}
+                }} onClick={() => copyToClipboard(userConfig)}>
+                  {userConfig}
                 </pre>
               </div>
 
               <div className="modal-actions">
                 <button className="btn btn-secondary" onClick={() => setShowInfoModal(false)}>Close</button>
-                <button className="btn btn-primary" onClick={() => copyToClipboard('proxies:\n' + userConfig)}>
+                <button className="btn btn-primary" onClick={() => copyToClipboard(userConfig)}>
                   Copy Config
                 </button>
               </div>

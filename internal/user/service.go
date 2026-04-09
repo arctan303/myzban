@@ -143,50 +143,6 @@ func (s *Service) GetTrafficLogs(username string, limit int) ([]*db.TrafficLog, 
 	return s.db.GetTrafficLogs(user.ID, limit)
 }
 
-// GetClientConfig generates per-user Clash YAML for all installed protocols
-func (s *Service) GetClientConfig(username string) (string, error) {
-	user, err := s.db.GetUserByUsername(username)
-	if err != nil {
-		return "", fmt.Errorf("user '%s' not found", username)
-	}
-
-	nodeInfo, err := s.db.GetNodeInfo()
-	if err != nil {
-		return "", fmt.Errorf("get node info: %w", err)
-	}
-
-	var parts []string
-
-	vlessConf, _ := s.db.GetProxyConfig("vless")
-	if vlessConf != nil && vlessConf.Installed {
-		parts = append(parts, s.xray.GenerateClientConfig(user, nodeInfo))
-	}
-
-	hy2Conf, _ := s.db.GetProxyConfig("hysteria2")
-	if hy2Conf != nil && hy2Conf.Installed {
-		parts = append(parts, s.hy2.GenerateClientConfig(user, nodeInfo))
-	}
-
-	if len(parts) == 0 {
-		return "", fmt.Errorf("no proxy protocols installed")
-	}
-
-	return strings.Join(parts, "\n"), nil
-}
-
-// GetSubscriptionURL returns the subscription URL for a user
-func (s *Service) GetSubscriptionURL(username string) (string, error) {
-	user, err := s.db.GetUserByUsername(username)
-	if err != nil {
-		return "", fmt.Errorf("user '%s' not found", username)
-	}
-	nodeInfo, _ := s.db.GetNodeInfo()
-	ip := nodeInfo.ServerIP
-	if ip == "" {
-		ip = "YOUR_SERVER_IP"
-	}
-	return fmt.Sprintf("http://%s:9090/sub/%s", ip, user.SubToken), nil
-}
 
 // syncProxies regenerates configs and restarts if needed
 func (s *Service) syncProxies() {

@@ -175,19 +175,3 @@ func (h *Hy2Manager) GetTrafficStats(reset bool) (map[string]*TrafficData, error
 	return result, nil
 }
 
-// GenerateClientConfig generates Clash YAML config for a specific user
-func (h *Hy2Manager) GenerateClientConfig(user *db.User, nodeInfo *db.NodeInfo) string {
-	return fmt.Sprintf(`  - name: "%s-UDP"
-    type: hysteria2
-    server: %s
-    port: %d
-    password: %s
-    up: 50 Mbps
-    down: 100 Mbps
-    sni: www.bing.com
-    skip-cert-verify: true
-    alpn:
-      - h3`,
-		nodeInfo.ServerIP, nodeInfo.ServerIP, h.cfg.Hy2Port,
-		user.Hy2Password)
-}

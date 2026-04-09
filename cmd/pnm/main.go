@@ -304,8 +304,6 @@ func main() {
 				log.Fatalf("❌ %v", err)
 			}
 
-			subURL, _ := userService.GetSubscriptionURL(args[0])
-
 			fmt.Println("✅ User created successfully!")
 			fmt.Println()
 			fmt.Printf("  Username:      %s\n", u.Username)
@@ -314,12 +312,6 @@ func main() {
 			fmt.Printf("  Sub Token:     %s\n", u.SubToken)
 			fmt.Printf("  Enabled:       %s\n", boolIcon(u.Enabled))
 			fmt.Println()
-			if subURL != "" {
-				fmt.Printf("  📋 Subscription URL: %s\n", subURL)
-				fmt.Println("     (User can import this URL in Clash/v2ray client)")
-			}
-			fmt.Println()
-			fmt.Println("Use 'pnm user info <username>' to see full client config.")
 		},
 	}
 
@@ -364,47 +356,7 @@ func main() {
 			initDeps()
 			defer database.Close()
 
-			u, err := userService.GetUser(args[0])
-			if err != nil {
-				log.Fatalf("❌ %v", err)
-			}
-
-			subURL, _ := userService.GetSubscriptionURL(args[0])
-			total := u.TrafficUp + u.TrafficDown
-
-			fmt.Println("╔════════════════════════════════════════╗")
-			fmt.Printf("║  User: %-32s║\n", u.Username)
-			fmt.Println("╚════════════════════════════════════════╝")
-			fmt.Printf("  ID:            %d\n", u.ID)
-			fmt.Printf("  Email:         %s\n", u.Email)
-			fmt.Printf("  VLESS UUID:    %s\n", u.UUID)
-			fmt.Printf("  Hy2 Password:  %s\n", u.Hy2Password)
-			fmt.Printf("  Sub Token:     %s\n", u.SubToken)
-			fmt.Printf("  Enabled:       %s\n", boolIcon(u.Enabled))
-			fmt.Printf("  Upload:        %s\n", api.FormatBytes(u.TrafficUp))
-			fmt.Printf("  Download:      %s\n", api.FormatBytes(u.TrafficDown))
-			fmt.Printf("  Total:         %s\n", api.FormatBytes(total))
-			if u.TrafficLimit > 0 {
-				fmt.Printf("  Limit:         %s\n", api.FormatBytes(u.TrafficLimit))
-			}
-			if u.ExpiresAt != nil {
-				fmt.Printf("  Expires:       %s\n", u.ExpiresAt.Format("2006-01-02 15:04:05"))
-			}
-			if subURL != "" {
-				fmt.Printf("\n  📋 Subscription URL: %s\n", subURL)
-			}
 			fmt.Println()
-
-			clientCfg, err := userService.GetClientConfig(args[0])
-			if err != nil {
-				fmt.Printf("  ⚠ No client config: %v\n", err)
-				return
-			}
-
-			fmt.Println("── Clash / Meta 客户端配置 (YAML) ──────────")
-			fmt.Println("proxies:")
-			fmt.Println(clientCfg)
-			fmt.Println("─────────────────────────────────────────────")
 		},
 	}
 
@@ -564,7 +516,6 @@ func main() {
 			}()
 
 			fmt.Printf("  API:        http://%s (admin token required)\n", cfg.APIListenAddr)
-			fmt.Printf("  Sub URL:    http://%s:9090/sub/{token}\n", nodeInfo.ServerIP)
 			fmt.Printf("  Hy2 Auth:   http://%s/hy2/auth\n", cfg.AuthListenAddr)
 			fmt.Printf("  Collector:  every %ds\n", cfg.CollectInterval)
 			fmt.Println()
