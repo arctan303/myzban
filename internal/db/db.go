@@ -98,7 +98,6 @@ func (d *DB) migrate() error {
 		`INSERT OR IGNORE INTO proxy_configs (protocol, port) VALUES ('hysteria2', 8443)`,
 		`CREATE INDEX IF NOT EXISTS idx_traffic_logs_user ON traffic_logs(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_traffic_logs_time ON traffic_logs(record_at)`,
-		`CREATE INDEX IF NOT EXISTS idx_users_sub_token ON users(sub_token)`,
 	}
 
 	for _, m := range migrations {
@@ -115,6 +114,9 @@ func (d *DB) migrate() error {
 	for _, a := range alters {
 		d.conn.Exec(a) // ignore errors
 	}
+
+	// Create indexes on potentially-altered columns (ignore errors)
+	d.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_users_sub_token ON users(sub_token)`)
 
 	return nil
 }
