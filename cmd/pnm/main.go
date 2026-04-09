@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -69,22 +71,18 @@ func main() {
 				if err := xrayInst.Install(); err != nil {
 					log.Fatalf("❌ %v", err)
 				}
-				// Generate initial config and start
 				users, _ := database.ListEnabledUsers()
 				xrayMgr.GenerateConfig(users)
 				xrayMgr.Start()
 				fmt.Println("✅ VLESS Reality installed and started!")
-
 			case "hy2":
 				if err := hy2Inst.Install(); err != nil {
 					log.Fatalf("❌ %v", err)
 				}
-				// Generate Hy2 config and start
 				users, _ := database.ListEnabledUsers()
 				hy2Mgr.GenerateConfig(users)
 				hy2Mgr.Start()
 				fmt.Println("✅ Hysteria2 installed and started!")
-
 			case "all":
 				if err := xrayInst.Install(); err != nil {
 					log.Printf("⚠ vless: %v", err)
@@ -98,7 +96,6 @@ func main() {
 				xrayMgr.Start()
 				hy2Mgr.Start()
 				fmt.Println("✅ All proxies installed and started!")
-
 			default:
 				log.Fatalf("Unknown protocol: %s (use vless, hy2, or all)", args[0])
 			}
@@ -113,7 +110,6 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			initDeps()
 			defer database.Close()
-
 			switch args[0] {
 			case "vless":
 				xrayInst.Uninstall()
@@ -129,7 +125,63 @@ func main() {
 		},
 	}
 
-	// --- proxy status ---
+	// --- token ---
+	tokenCmd := &cobra.Command{
+		Use:   "token",
+		Short: "Manage admin API token",
+	}
+
+	tokenInitCmd := &cobra.Command{
+		Use:   "init",
+		Short: "Generate and set a new admin API token",
+		Run: func(cmd *cobra.Command, args []string) {
+			initDeps()
+			defer database.Close()
+
+			token := generateAdminToken()
+			nodeInfo, _ := database.GetNodeInfo()
+			if nodeInfo == nil {
+				log.Fatal("node info not found")
+			}
+			nodeInfo.AdminToken = token
+			if err := database.SaveNodeInfo(nodeInfo); err != nil {
+				log.Fatalf("❌ save token: %v", err)
+			}
+
+			fmt.Println("✅ Admin token generated!")
+			fmt.Println()
+			fmt.Printf("  Token: %s\n", token)
+			fmt.Println()
+			ip := nodeInfo.ServerIP
+			if ip == "" {
+				ip = "YOUR_SERVER_IP"
+			}
+			fmt.Printf("  API URL: http://%s:9090/api/v1/status?token=%s\n", ip, token)
+			fmt.Println()
+			fmt.Println("⚠  Save this token! You'll need it to connect the panel.")
+			fmt.Println("   The API is now protected — all /api/v1/* requests require this token.")
+		},
+	}
+
+	tokenShowCmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show current admin API token",
+		Run: func(cmd *cobra.Command, args []string) {
+			initDeps()
+			defer database.Close()
+
+			nodeInfo, _ := database.GetNodeInfo()
+			if nodeInfo == nil || nodeInfo.AdminToken == "" {
+				fmt.Println("No admin token set. Run: pnm token init")
+				return
+			}
+			fmt.Printf("Admin Token: %s\n", nodeInfo.AdminToken)
+		},
+	}
+
+	tokenCmd.AddCommand(tokenInitCmd, tokenShowCmd)
+
+	// --- proxy ---
 	proxyCmd := &cobra.Command{
 		Use:   "proxy",
 		Short: "Proxy service management",
@@ -152,9 +204,11 @@ func main() {
 			if nodeInfo != nil && nodeInfo.ServerIP != "" {
 				fmt.Printf("  Server IP:  %s\n", nodeInfo.ServerIP)
 			}
+			if nodeInfo != nil && nodeInfo.AdminToken != "" {
+				fmt.Printf("  Admin API:  http://%s:9090/api/v1/\n", nodeInfo.ServerIP)
+			}
 			fmt.Println()
 
-			// VLESS
 			installed := vlessConf != nil && vlessConf.Installed
 			running := xrayMgr.IsRunning()
 			fmt.Printf("  VLESS Reality:\n")
@@ -165,7 +219,6 @@ func main() {
 			}
 			fmt.Println()
 
-			// Hy2
 			installed = hy2Conf != nil && hy2Conf.Installed
 			running = hy2Mgr.IsRunning()
 			fmt.Printf("  Hysteria2:\n")
@@ -184,9 +237,7 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			initDeps()
 			defer database.Close()
-
 			users, _ := database.ListEnabledUsers()
-
 			switch args[0] {
 			case "vless":
 				xrayMgr.GenerateConfig(users)
@@ -217,7 +268,6 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			initDeps()
 			defer database.Close()
-
 			switch args[0] {
 			case "vless":
 				xrayMgr.Stop()
@@ -254,15 +304,22 @@ func main() {
 				log.Fatalf("❌ %v", err)
 			}
 
+			subURL, _ := userService.GetSubscriptionURL(args[0])
+
 			fmt.Println("✅ User created successfully!")
 			fmt.Println()
 			fmt.Printf("  Username:      %s\n", u.Username)
-			fmt.Printf("  Email:         %s\n", u.Email)
 			fmt.Printf("  VLESS UUID:    %s\n", u.UUID)
 			fmt.Printf("  Hy2 Password:  %s\n", u.Hy2Password)
+			fmt.Printf("  Sub Token:     %s\n", u.SubToken)
 			fmt.Printf("  Enabled:       %s\n", boolIcon(u.Enabled))
 			fmt.Println()
-			fmt.Println("Use 'pnm user info <username>' to see client config.")
+			if subURL != "" {
+				fmt.Printf("  📋 Subscription URL: %s\n", subURL)
+				fmt.Println("     (User can import this URL in Clash/v2ray client)")
+			}
+			fmt.Println()
+			fmt.Println("Use 'pnm user info <username>' to see full client config.")
 		},
 	}
 
@@ -312,7 +369,9 @@ func main() {
 				log.Fatalf("❌ %v", err)
 			}
 
+			subURL, _ := userService.GetSubscriptionURL(args[0])
 			total := u.TrafficUp + u.TrafficDown
+
 			fmt.Println("╔════════════════════════════════════════╗")
 			fmt.Printf("║  User: %-32s║\n", u.Username)
 			fmt.Println("╚════════════════════════════════════════╝")
@@ -320,6 +379,7 @@ func main() {
 			fmt.Printf("  Email:         %s\n", u.Email)
 			fmt.Printf("  VLESS UUID:    %s\n", u.UUID)
 			fmt.Printf("  Hy2 Password:  %s\n", u.Hy2Password)
+			fmt.Printf("  Sub Token:     %s\n", u.SubToken)
 			fmt.Printf("  Enabled:       %s\n", boolIcon(u.Enabled))
 			fmt.Printf("  Upload:        %s\n", api.FormatBytes(u.TrafficUp))
 			fmt.Printf("  Download:      %s\n", api.FormatBytes(u.TrafficDown))
@@ -330,9 +390,11 @@ func main() {
 			if u.ExpiresAt != nil {
 				fmt.Printf("  Expires:       %s\n", u.ExpiresAt.Format("2006-01-02 15:04:05"))
 			}
+			if subURL != "" {
+				fmt.Printf("\n  📋 Subscription URL: %s\n", subURL)
+			}
 			fmt.Println()
 
-			// Output client config
 			clientCfg, err := userService.GetClientConfig(args[0])
 			if err != nil {
 				fmt.Printf("  ⚠ No client config: %v\n", err)
@@ -405,7 +467,6 @@ func main() {
 			defer database.Close()
 
 			if len(args) == 1 {
-				// Show specific user
 				u, err := userService.GetUser(args[0])
 				if err != nil {
 					log.Fatalf("❌ %v", err)
@@ -428,7 +489,6 @@ func main() {
 					}
 				}
 			} else {
-				// Show all users summary
 				users, err := userService.ListUsers()
 				if err != nil {
 					log.Fatalf("❌ %v", err)
@@ -477,15 +537,18 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			initDeps()
 
+			nodeInfo, _ := database.GetNodeInfo()
 			fmt.Println("╔════════════════════════════════════════╗")
 			fmt.Println("║    ProxyNode Manager — Daemon Mode    ║")
 			fmt.Println("╚════════════════════════════════════════╝")
+			if nodeInfo != nil && nodeInfo.AdminToken == "" {
+				fmt.Println("⚠  No admin token set! Run 'pnm token init' first.")
+				fmt.Println("   API will reject all requests until a token is set.")
+			}
 
-			// Start traffic collector
 			collector := traffic.NewCollector(database, xrayMgr, hy2Mgr, cfg.CollectInterval)
 			collector.Start()
 
-			// Start Hy2 auth endpoint in background
 			go func() {
 				server := api.NewServer(cfg, database, userService, xrayMgr, hy2Mgr, xrayInst, hy2Inst)
 				if err := server.StartAuthEndpoint(); err != nil {
@@ -493,7 +556,6 @@ func main() {
 				}
 			}()
 
-			// Start API server in background
 			go func() {
 				server := api.NewServer(cfg, database, userService, xrayMgr, hy2Mgr, xrayInst, hy2Inst)
 				if err := server.Start(); err != nil {
@@ -501,13 +563,13 @@ func main() {
 				}
 			}()
 
-			fmt.Printf("  API:        http://%s\n", cfg.APIListenAddr)
+			fmt.Printf("  API:        http://%s (admin token required)\n", cfg.APIListenAddr)
+			fmt.Printf("  Sub URL:    http://%s:9090/sub/{token}\n", nodeInfo.ServerIP)
 			fmt.Printf("  Hy2 Auth:   http://%s/hy2/auth\n", cfg.AuthListenAddr)
 			fmt.Printf("  Collector:  every %ds\n", cfg.CollectInterval)
 			fmt.Println()
 			fmt.Println("Press Ctrl+C to stop.")
 
-			// Wait for shutdown signal
 			sigCh := make(chan os.Signal, 1)
 			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 			<-sigCh
@@ -518,7 +580,7 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(installCmd, uninstallCmd, proxyCmd, userCmd, trafficCmd, serveCmd)
+	rootCmd.AddCommand(installCmd, uninstallCmd, tokenCmd, proxyCmd, userCmd, trafficCmd, serveCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -530,4 +592,10 @@ func boolIcon(b bool) string {
 		return "✅"
 	}
 	return "❌"
+}
+
+func generateAdminToken() string {
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
 }

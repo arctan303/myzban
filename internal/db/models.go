@@ -6,13 +6,14 @@ import "time"
 type User struct {
 	ID           int64      `json:"id"`
 	Username     string     `json:"username"`
-	Email        string     `json:"email"`        // Xray uses email as user identifier
-	UUID         string     `json:"uuid"`          // VLESS UUID
-	Hy2Password  string     `json:"hy2_password"`  // Hysteria2 password
+	Email        string     `json:"email"`         // Xray uses email as user identifier
+	UUID         string     `json:"uuid"`           // VLESS UUID
+	Hy2Password  string     `json:"hy2_password"`   // Hysteria2 password
+	SubToken     string     `json:"sub_token"`      // subscription token for fetching config
 	Enabled      bool       `json:"enabled"`
-	TrafficUp    int64      `json:"traffic_up"`    // cumulative upload bytes
-	TrafficDown  int64      `json:"traffic_down"`  // cumulative download bytes
-	TrafficLimit int64      `json:"traffic_limit"` // traffic cap (0 = unlimited)
+	TrafficUp    int64      `json:"traffic_up"`     // cumulative upload bytes
+	TrafficDown  int64      `json:"traffic_down"`   // cumulative download bytes
+	TrafficLimit int64      `json:"traffic_limit"`  // traffic cap (0 = unlimited)
 	ExpiresAt    *time.Time `json:"expires_at"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
@@ -42,8 +43,10 @@ type NodeInfo struct {
 	ID         int64  `json:"id"`
 	ServerIP   string `json:"server_ip"`
 	XrayPubKey string `json:"xray_pub_key"` // X25519 public key
-	XrayPriKey string `json:"xray_pri_key"` // X25519 private key
+	XrayPriKey string `json:"-"`            // X25519 private key (hidden from JSON)
 	ShortID    string `json:"short_id"`     // Reality short id
 	Hy2Cert    string `json:"hy2_cert"`     // certificate path
-	Hy2Key     string `json:"hy2_key"`      // key path
+	Hy2Key     string `json:"-"`            // key path (hidden from JSON)
+	AdminToken string `json:"-"`            // admin API token (hidden from JSON)
 }
+

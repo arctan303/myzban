@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/pnm/proxy-node-manager/internal/config"
 	"github.com/pnm/proxy-node-manager/internal/db"
@@ -15,11 +16,11 @@ import (
 
 // Server holds all dependencies for the HTTP API
 type Server struct {
-	cfg          *config.Config
-	db           *db.DB
-	userService  *user.Service
-	xray         *proxy.XrayManager
-	hy2          *proxy.Hy2Manager
+	cfg           *config.Config
+	db            *db.DB
+	userService   *user.Service
+	xray          *proxy.XrayManager
+	hy2           *proxy.Hy2Manager
 	xrayInstaller *installer.XrayInstaller
 	hy2Installer  *installer.Hy2Installer
 }
@@ -35,37 +36,42 @@ func NewServer(
 	hy2Inst *installer.Hy2Installer,
 ) *Server {
 	return &Server{
-		cfg:          cfg,
-		db:           database,
-		userService:  userSvc,
-		xray:         xray,
-		hy2:          hy2,
+		cfg:           cfg,
+		db:            database,
+		userService:   userSvc,
+		xray:          xray,
+		hy2:           hy2,
 		xrayInstaller: xrayInst,
 		hy2Installer:  hy2Inst,
 	}
 }
 
-// Start starts the HTTP API server (blocking)
+// Start starts the main HTTP API server (blocking)
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	// System
-	mux.HandleFunc("/api/v1/status", s.handleStatus)
+	// --- Public endpoints (no auth) ---
+	// Subscription: GET /sub/{token} — user fetches their own config
+	mux.HandleFunc("/sub/", s.handleSubscription)
+	// Health check
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("pong"))
+	})
 
-	// Proxy management
-	mux.HandleFunc("/api/v1/proxy/install", s.handleProxyInstall)
-	mux.HandleFunc("/api/v1/proxy/start", s.handleProxyStart)
-	mux.HandleFunc("/api/v1/proxy/stop", s.handleProxyStop)
-
-	// User management
-	mux.HandleFunc("/api/v1/users", s.handleUsers)
-	mux.HandleFunc("/api/v1/users/", s.handleUserByPath)
+	// --- Admin endpoints (require admin token) ---
+	mux.HandleFunc("/api/v1/status", s.adminAuth(s.handleStatus))
+	mux.HandleFunc("/api/v1/proxy/install", s.adminAuth(s.handleProxyInstall))
+	mux.HandleFunc("/api/v1/proxy/start", s.adminAuth(s.handleProxyStart))
+	mux.HandleFunc("/api/v1/proxy/stop", s.adminAuth(s.handleProxyStop))
+	mux.HandleFunc("/api/v1/users", s.adminAuth(s.handleUsers))
+	mux.HandleFunc("/api/v1/users/", s.adminAuth(s.handleUserByPath))
+	mux.HandleFunc("/api/v1/node", s.adminAuth(s.handleNodeInfo))
 
 	log.Printf("[api] listening on %s", s.cfg.APIListenAddr)
-	return http.ListenAndServe(s.cfg.APIListenAddr, mux)
+	return http.ListenAndServe(s.cfg.APIListenAddr, withCORS(mux))
 }
 
-// StartAuthEndpoint starts the Hysteria2 HTTP auth endpoint (blocking)
+// StartAuthEndpoint starts the Hysteria2 HTTP auth endpoint (blocking, internal only)
 func (s *Server) StartAuthEndpoint() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hy2/auth", s.handleHy2Auth)
@@ -74,7 +80,96 @@ func (s *Server) StartAuthEndpoint() error {
 	return http.ListenAndServe(s.cfg.AuthListenAddr, mux)
 }
 
-// --- Handlers ---
+// --- Middleware ---
+
+// adminAuth wraps a handler with admin token authentication
+func (s *Server) adminAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		nodeInfo, err := s.db.GetNodeInfo()
+		if err != nil || nodeInfo.AdminToken == "" {
+			// No admin token set — reject all requests
+			jsonError(w, http.StatusUnauthorized, "admin token not configured, run: pnm token init")
+			return
+		}
+
+		// Accept token from Authorization header or ?token= query param
+		token := r.Header.Get("Authorization")
+		token = strings.TrimPrefix(token, "Bearer ")
+		if token == "" {
+			token = r.URL.Query().Get("token")
+		}
+
+		if token != nodeInfo.AdminToken {
+			jsonError(w, http.StatusUnauthorized, "invalid admin token")
+			return
+		}
+
+		next(w, r)
+	}
+}
+
+// withCORS adds CORS headers for panel access
+func withCORS(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		h.ServeHTTP(w, r)
+	})
+}
+
+// --- Public Handlers ---
+
+// handleSubscription serves per-user Clash YAML config via their sub token
+// GET /sub/{token}
+func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	token := strings.TrimPrefix(r.URL.Path, "/sub/")
+	if token == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	u, err := s.db.GetUserBySubToken(token)
+	if err != nil || u == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Check traffic limit
+	if u.TrafficLimit > 0 && (u.TrafficUp+u.TrafficDown) >= u.TrafficLimit {
+		http.Error(w, "traffic limit exceeded", http.StatusForbidden)
+		return
+	}
+
+	clientCfg, err := s.userService.GetClientConfig(u.Username)
+	if err != nil {
+		http.Error(w, "no proxy config available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Return full Clash config with proxies
+	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"clash-config.yaml\"")
+	w.Header().Set("Profile-Update-Interval", "24")
+
+	fmt.Fprintf(w, "# ProxyNode Manager - %s\n", u.Username)
+	fmt.Fprintf(w, "# Generated for user: %s\n\n", u.Username)
+	fmt.Fprintln(w, "proxies:")
+	fmt.Fprintln(w, clientCfg)
+}
+
+// --- Admin Handlers ---
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -84,10 +179,13 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	users, _ := s.db.ListUsers()
 	enabledCount := 0
+	var totalUp, totalDown int64
 	for _, u := range users {
 		if u.Enabled {
 			enabledCount++
 		}
+		totalUp += u.TrafficUp
+		totalDown += u.TrafficDown
 	}
 
 	vlessConf, _ := s.db.GetProxyConfig("vless")
@@ -98,6 +196,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"server_ip":     nodeInfo.ServerIP,
 		"total_users":   len(users),
 		"enabled_users": enabledCount,
+		"total_upload":  totalUp,
+		"total_download": totalDown,
 		"vless": map[string]interface{}{
 			"installed": vlessConf != nil && vlessConf.Installed,
 			"running":   s.xray.IsRunning(),
@@ -111,6 +211,20 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResp(w, http.StatusOK, status)
+}
+
+func (s *Server) handleNodeInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	nodeInfo, err := s.db.GetNodeInfo()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Return safe node info (XrayPriKey and AdminToken hidden via json:"-")
+	jsonResp(w, http.StatusOK, nodeInfo)
 }
 
 func (s *Server) handleProxyInstall(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +274,6 @@ func (s *Server) handleProxyStart(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch req.Protocol {
 	case "vless":
-		// Regenerate config with current users before starting
 		users, _ := s.db.ListEnabledUsers()
 		s.xray.GenerateConfig(users)
 		err = s.xray.Start()
@@ -227,12 +340,12 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusBadRequest, "invalid body")
 			return
 		}
-		user, err := s.userService.CreateUser(req.Username)
+		u, err := s.userService.CreateUser(req.Username)
 		if err != nil {
 			jsonError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		jsonResp(w, http.StatusCreated, user)
+		jsonResp(w, http.StatusCreated, u)
 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -240,7 +353,6 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUserByPath(w http.ResponseWriter, r *http.Request) {
-	// Extract username from path: /api/v1/users/{username}[/action]
 	path := r.URL.Path
 	prefix := "/api/v1/users/"
 	if len(path) <= len(prefix) {
@@ -258,16 +370,14 @@ func (s *Server) handleUserByPath(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case action == "" && r.Method == http.MethodGet:
-		// GET /api/v1/users/{username}
-		user, err := s.userService.GetUser(username)
+		u, err := s.userService.GetUser(username)
 		if err != nil {
 			jsonError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		jsonResp(w, http.StatusOK, user)
+		jsonResp(w, http.StatusOK, u)
 
 	case action == "" && r.Method == http.MethodDelete:
-		// DELETE /api/v1/users/{username}
 		if err := s.userService.DeleteUser(username); err != nil {
 			jsonError(w, http.StatusBadRequest, err.Error())
 			return
@@ -289,7 +399,6 @@ func (s *Server) handleUserByPath(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, http.StatusOK, map[string]string{"status": "disabled"})
 
 	case action == "config" && r.Method == http.MethodGet:
-		// GET /api/v1/users/{username}/config — per-user client YAML
 		cfg, err := s.userService.GetClientConfig(username)
 		if err != nil {
 			jsonError(w, http.StatusBadRequest, err.Error())
@@ -319,7 +428,6 @@ func (s *Server) handleUserByPath(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHy2Auth handles Hysteria2 HTTP auth requests
-// Hy2 sends POST with: {"addr": "...", "auth": "password_string", "tx": 0}
 func (s *Server) handleHy2Auth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -337,26 +445,23 @@ func (s *Server) handleHy2Auth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up user by hy2_password
-	user, err := s.db.FindEnabledUserByHy2Auth(req.Auth)
-	if err != nil || user == nil {
+	u, err := s.db.FindEnabledUserByHy2Auth(req.Auth)
+	if err != nil || u == nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false})
 		return
 	}
 
-	// Check traffic limit
-	if user.TrafficLimit > 0 && (user.TrafficUp+user.TrafficDown) >= user.TrafficLimit {
+	if u.TrafficLimit > 0 && (u.TrafficUp+u.TrafficDown) >= u.TrafficLimit {
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false})
 		return
 	}
 
-	// Auth success — return username as the ID for traffic tracking
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"ok": true,
-		"id": user.Username,
+		"id": u.Username,
 	})
 }
 
@@ -374,29 +479,12 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 
 func splitPath(path string) []string {
 	var parts []string
-	for _, p := range splitString(path, '/') {
+	for _, p := range strings.Split(path, "/") {
 		if p != "" {
 			parts = append(parts, p)
 		}
 	}
 	return parts
-}
-
-func splitString(s string, sep byte) []string {
-	var result []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == sep {
-			if i > start {
-				result = append(result, s[start:i])
-			}
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		result = append(result, s[start:])
-	}
-	return result
 }
 
 // FormatBytes formats bytes into human-readable form

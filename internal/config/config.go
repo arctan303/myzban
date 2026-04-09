@@ -9,8 +9,8 @@ import (
 const (
 	DefaultConfigDir  = "/etc/pnm"
 	DefaultDBPath     = "/etc/pnm/pnm.db"
-	DefaultAPIAddr    = "127.0.0.1:9090"
-	DefaultAuthAddr   = "127.0.0.1:19876" // Hy2 HTTP auth endpoint
+	DefaultAPIAddr    = "0.0.0.0:9090"
+	DefaultAuthAddr   = "127.0.0.1:19876" // Hy2 HTTP auth endpoint (internal only)
 	DefaultVLESSPort  = 443
 	DefaultHy2Port    = 8443
 	DefaultCollectSec = 60 // traffic collection interval

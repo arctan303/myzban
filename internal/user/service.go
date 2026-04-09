@@ -32,28 +32,22 @@ func NewService(database *db.DB, cfg *config.Config, xray *proxy.XrayManager, hy
 
 // CreateUser creates a new user with auto-generated credentials
 func (s *Service) CreateUser(username string) (*db.User, error) {
-	// Validate username
 	username = strings.TrimSpace(username)
 	if username == "" {
 		return nil, fmt.Errorf("username cannot be empty")
 	}
 
-	// Check duplicate
 	existing, _ := s.db.GetUserByUsername(username)
 	if existing != nil {
 		return nil, fmt.Errorf("user '%s' already exists", username)
 	}
 
-	// Generate credentials
-	userUUID := uuid.New().String()
-	email := fmt.Sprintf("%s@pnm", username) // Xray requires unique email
-	hy2Password := generatePassword(16)
-
 	user := &db.User{
 		Username:    username,
-		Email:       email,
-		UUID:        userUUID,
-		Hy2Password: hy2Password,
+		Email:       fmt.Sprintf("%s@pnm", username),
+		UUID:        uuid.New().String(),
+		Hy2Password: generateToken(16),
+		SubToken:    generateToken(24), // longer token for subscription URLs
 		Enabled:     true,
 	}
 
@@ -61,15 +55,12 @@ func (s *Service) CreateUser(username string) (*db.User, error) {
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
-	// Sync with running proxies
 	s.syncProxies()
-
 	return user, nil
 }
 
-// GetUser retrieves a user by ID or username
+// GetUser retrieves a user by username
 func (s *Service) GetUser(identifier string) (*db.User, error) {
-	// Try by username first
 	user, err := s.db.GetUserByUsername(identifier)
 	if err == nil {
 		return user, nil
@@ -82,7 +73,7 @@ func (s *Service) ListUsers() ([]*db.User, error) {
 	return s.db.ListUsers()
 }
 
-// EnableUser enables a user and adds them to running proxies
+// EnableUser enables a user and syncs proxies
 func (s *Service) EnableUser(username string) error {
 	user, err := s.db.GetUserByUsername(username)
 	if err != nil {
@@ -91,16 +82,14 @@ func (s *Service) EnableUser(username string) error {
 	if user.Enabled {
 		return fmt.Errorf("user '%s' is already enabled", username)
 	}
-
 	if err := s.db.SetUserEnabled(user.ID, true); err != nil {
 		return err
 	}
-
 	s.syncProxies()
 	return nil
 }
 
-// DisableUser disables a user and removes them from running proxies
+// DisableUser disables a user and removes from proxies
 func (s *Service) DisableUser(username string) error {
 	user, err := s.db.GetUserByUsername(username)
 	if err != nil {
@@ -109,12 +98,9 @@ func (s *Service) DisableUser(username string) error {
 	if !user.Enabled {
 		return fmt.Errorf("user '%s' is already disabled", username)
 	}
-
 	if err := s.db.SetUserEnabled(user.ID, false); err != nil {
 		return err
 	}
-
-	// Remove from proxies
 	if s.xray != nil {
 		s.xray.RemoveUser(user)
 	}
@@ -130,15 +116,12 @@ func (s *Service) DeleteUser(username string) error {
 	if err != nil {
 		return fmt.Errorf("user '%s' not found", username)
 	}
-
-	// Remove from proxies first
 	if s.xray != nil {
 		s.xray.RemoveUser(user)
 	}
 	if s.hy2 != nil {
 		s.hy2.RemoveUser(user)
 	}
-
 	return s.db.DeleteUser(user.ID)
 }
 
@@ -174,13 +157,11 @@ func (s *Service) GetClientConfig(username string) (string, error) {
 
 	var parts []string
 
-	// VLESS config
 	vlessConf, _ := s.db.GetProxyConfig("vless")
 	if vlessConf != nil && vlessConf.Installed {
 		parts = append(parts, s.xray.GenerateClientConfig(user, nodeInfo))
 	}
 
-	// Hy2 config
 	hy2Conf, _ := s.db.GetProxyConfig("hysteria2")
 	if hy2Conf != nil && hy2Conf.Installed {
 		parts = append(parts, s.hy2.GenerateClientConfig(user, nodeInfo))
@@ -193,6 +174,20 @@ func (s *Service) GetClientConfig(username string) (string, error) {
 	return strings.Join(parts, "\n"), nil
 }
 
+// GetSubscriptionURL returns the subscription URL for a user
+func (s *Service) GetSubscriptionURL(username string) (string, error) {
+	user, err := s.db.GetUserByUsername(username)
+	if err != nil {
+		return "", fmt.Errorf("user '%s' not found", username)
+	}
+	nodeInfo, _ := s.db.GetNodeInfo()
+	ip := nodeInfo.ServerIP
+	if ip == "" {
+		ip = "YOUR_SERVER_IP"
+	}
+	return fmt.Sprintf("http://%s:9090/sub/%s", ip, user.SubToken), nil
+}
+
 // syncProxies regenerates configs and restarts if needed
 func (s *Service) syncProxies() {
 	users, err := s.db.ListEnabledUsers()
@@ -200,7 +195,6 @@ func (s *Service) syncProxies() {
 		return
 	}
 
-	// Sync Xray
 	vlessConf, _ := s.db.GetProxyConfig("vless")
 	if vlessConf != nil && vlessConf.Installed && s.xray != nil {
 		if err := s.xray.GenerateConfig(users); err == nil {
@@ -209,11 +203,9 @@ func (s *Service) syncProxies() {
 			}
 		}
 	}
-
-	// Hy2 doesn't need sync with HTTP auth - it queries DB directly
 }
 
-func generatePassword(length int) string {
+func generateToken(length int) string {
 	bytes := make([]byte, length)
 	rand.Read(bytes)
 	return hex.EncodeToString(bytes)

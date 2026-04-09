@@ -58,6 +58,7 @@ func (d *DB) migrate() error {
 			email TEXT UNIQUE NOT NULL,
 			uuid TEXT UNIQUE NOT NULL,
 			hy2_password TEXT NOT NULL,
+			sub_token TEXT UNIQUE NOT NULL DEFAULT '',
 			enabled INTEGER NOT NULL DEFAULT 1,
 			traffic_up INTEGER NOT NULL DEFAULT 0,
 			traffic_down INTEGER NOT NULL DEFAULT 0,
@@ -89,13 +90,15 @@ func (d *DB) migrate() error {
 			xray_pri_key TEXT NOT NULL DEFAULT '',
 			short_id TEXT NOT NULL DEFAULT '',
 			hy2_cert TEXT NOT NULL DEFAULT '',
-			hy2_key TEXT NOT NULL DEFAULT ''
+			hy2_key TEXT NOT NULL DEFAULT '',
+			admin_token TEXT NOT NULL DEFAULT ''
 		)`,
 		`INSERT OR IGNORE INTO node_info (id) VALUES (1)`,
 		`INSERT OR IGNORE INTO proxy_configs (protocol, port) VALUES ('vless', 443)`,
 		`INSERT OR IGNORE INTO proxy_configs (protocol, port) VALUES ('hysteria2', 8443)`,
 		`CREATE INDEX IF NOT EXISTS idx_traffic_logs_user ON traffic_logs(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_traffic_logs_time ON traffic_logs(record_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_sub_token ON users(sub_token)`,
 	}
 
 	for _, m := range migrations {
@@ -103,16 +106,41 @@ func (d *DB) migrate() error {
 			return fmt.Errorf("migration failed: %s: %w", m[:60], err)
 		}
 	}
+
+	// Run ALTER TABLE migrations (ignore errors if columns already exist)
+	alters := []string{
+		`ALTER TABLE users ADD COLUMN sub_token TEXT UNIQUE NOT NULL DEFAULT ''`,
+		`ALTER TABLE node_info ADD COLUMN admin_token TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, a := range alters {
+		d.conn.Exec(a) // ignore errors
+	}
+
 	return nil
 }
 
 // --- User CRUD ---
 
+// userScanFields returns all the fields to scan a user row
+const userSelectFields = `id, username, email, uuid, hy2_password, sub_token, enabled,
+	traffic_up, traffic_down, traffic_limit, expires_at, created_at, updated_at`
+
+func scanUser(row interface{ Scan(...interface{}) error }) (*User, error) {
+	u := &User{}
+	err := row.Scan(&u.ID, &u.Username, &u.Email, &u.UUID, &u.Hy2Password, &u.SubToken,
+		&u.Enabled, &u.TrafficUp, &u.TrafficDown, &u.TrafficLimit,
+		&u.ExpiresAt, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
 func (d *DB) CreateUser(u *User) error {
 	res, err := d.conn.Exec(
-		`INSERT INTO users (username, email, uuid, hy2_password, enabled, traffic_limit, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		u.Username, u.Email, u.UUID, u.Hy2Password, u.Enabled, u.TrafficLimit, u.ExpiresAt,
+		`INSERT INTO users (username, email, uuid, hy2_password, sub_token, enabled, traffic_limit, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		u.Username, u.Email, u.UUID, u.Hy2Password, u.SubToken, u.Enabled, u.TrafficLimit, u.ExpiresAt,
 	)
 	if err != nil {
 		return err
@@ -123,38 +151,26 @@ func (d *DB) CreateUser(u *User) error {
 }
 
 func (d *DB) GetUser(id int64) (*User, error) {
-	u := &User{}
-	err := d.conn.QueryRow(
-		`SELECT id, username, email, uuid, hy2_password, enabled,
-		        traffic_up, traffic_down, traffic_limit, expires_at, created_at, updated_at
-		 FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.UUID, &u.Hy2Password, &u.Enabled,
-		&u.TrafficUp, &u.TrafficDown, &u.TrafficLimit, &u.ExpiresAt, &u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return u, nil
+	return scanUser(d.conn.QueryRow(
+		`SELECT `+userSelectFields+` FROM users WHERE id = ?`, id,
+	))
 }
 
 func (d *DB) GetUserByUsername(username string) (*User, error) {
-	u := &User{}
-	err := d.conn.QueryRow(
-		`SELECT id, username, email, uuid, hy2_password, enabled,
-		        traffic_up, traffic_down, traffic_limit, expires_at, created_at, updated_at
-		 FROM users WHERE username = ?`, username,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.UUID, &u.Hy2Password, &u.Enabled,
-		&u.TrafficUp, &u.TrafficDown, &u.TrafficLimit, &u.ExpiresAt, &u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return u, nil
+	return scanUser(d.conn.QueryRow(
+		`SELECT `+userSelectFields+` FROM users WHERE username = ?`, username,
+	))
+}
+
+func (d *DB) GetUserBySubToken(token string) (*User, error) {
+	return scanUser(d.conn.QueryRow(
+		`SELECT `+userSelectFields+` FROM users WHERE sub_token = ? AND enabled = 1`, token,
+	))
 }
 
 func (d *DB) ListUsers() ([]*User, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, username, email, uuid, hy2_password, enabled,
-		        traffic_up, traffic_down, traffic_limit, expires_at, created_at, updated_at
-		 FROM users ORDER BY id`,
+		`SELECT ` + userSelectFields + ` FROM users ORDER BY id`,
 	)
 	if err != nil {
 		return nil, err
@@ -163,9 +179,8 @@ func (d *DB) ListUsers() ([]*User, error) {
 
 	var users []*User
 	for rows.Next() {
-		u := &User{}
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.UUID, &u.Hy2Password, &u.Enabled,
-			&u.TrafficUp, &u.TrafficDown, &u.TrafficLimit, &u.ExpiresAt, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, err
 		}
 		users = append(users, u)
@@ -175,9 +190,7 @@ func (d *DB) ListUsers() ([]*User, error) {
 
 func (d *DB) ListEnabledUsers() ([]*User, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, username, email, uuid, hy2_password, enabled,
-		        traffic_up, traffic_down, traffic_limit, expires_at, created_at, updated_at
-		 FROM users WHERE enabled = 1 ORDER BY id`,
+		`SELECT ` + userSelectFields + ` FROM users WHERE enabled = 1 ORDER BY id`,
 	)
 	if err != nil {
 		return nil, err
@@ -186,9 +199,8 @@ func (d *DB) ListEnabledUsers() ([]*User, error) {
 
 	var users []*User
 	for rows.Next() {
-		u := &User{}
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.UUID, &u.Hy2Password, &u.Enabled,
-			&u.TrafficUp, &u.TrafficDown, &u.TrafficLimit, &u.ExpiresAt, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, err
 		}
 		users = append(users, u)
@@ -198,10 +210,10 @@ func (d *DB) ListEnabledUsers() ([]*User, error) {
 
 func (d *DB) UpdateUser(u *User) error {
 	_, err := d.conn.Exec(
-		`UPDATE users SET username=?, email=?, uuid=?, hy2_password=?, enabled=?,
+		`UPDATE users SET username=?, email=?, uuid=?, hy2_password=?, sub_token=?, enabled=?,
 		 traffic_limit=?, expires_at=?, updated_at=CURRENT_TIMESTAMP
 		 WHERE id=?`,
-		u.Username, u.Email, u.UUID, u.Hy2Password, u.Enabled,
+		u.Username, u.Email, u.UUID, u.Hy2Password, u.SubToken, u.Enabled,
 		u.TrafficLimit, u.ExpiresAt, u.ID,
 	)
 	return err
@@ -275,9 +287,9 @@ func (d *DB) GetTrafficLogs(userID int64, limit int) ([]*TrafficLog, error) {
 func (d *DB) GetNodeInfo() (*NodeInfo, error) {
 	n := &NodeInfo{}
 	err := d.conn.QueryRow(
-		`SELECT id, server_ip, xray_pub_key, xray_pri_key, short_id, hy2_cert, hy2_key
+		`SELECT id, server_ip, xray_pub_key, xray_pri_key, short_id, hy2_cert, hy2_key, admin_token
 		 FROM node_info WHERE id = 1`,
-	).Scan(&n.ID, &n.ServerIP, &n.XrayPubKey, &n.XrayPriKey, &n.ShortID, &n.Hy2Cert, &n.Hy2Key)
+	).Scan(&n.ID, &n.ServerIP, &n.XrayPubKey, &n.XrayPriKey, &n.ShortID, &n.Hy2Cert, &n.Hy2Key, &n.AdminToken)
 	if err != nil {
 		return nil, err
 	}
@@ -286,9 +298,9 @@ func (d *DB) GetNodeInfo() (*NodeInfo, error) {
 
 func (d *DB) SaveNodeInfo(n *NodeInfo) error {
 	_, err := d.conn.Exec(
-		`UPDATE node_info SET server_ip=?, xray_pub_key=?, xray_pri_key=?, short_id=?, hy2_cert=?, hy2_key=?
+		`UPDATE node_info SET server_ip=?, xray_pub_key=?, xray_pri_key=?, short_id=?, hy2_cert=?, hy2_key=?, admin_token=?
 		 WHERE id = 1`,
-		n.ServerIP, n.XrayPubKey, n.XrayPriKey, n.ShortID, n.Hy2Cert, n.Hy2Key,
+		n.ServerIP, n.XrayPubKey, n.XrayPriKey, n.ShortID, n.Hy2Cert, n.Hy2Key, n.AdminToken,
 	)
 	return err
 }
@@ -315,33 +327,9 @@ func (d *DB) SaveProxyConfig(p *ProxyConfig) error {
 	return err
 }
 
-// FindUserByHy2Credentials looks up a user by hysteria2 username+password for HTTP auth
-func (d *DB) FindUserByHy2Credentials(username, password string) (*User, error) {
-	u := &User{}
-	err := d.conn.QueryRow(
-		`SELECT id, username, email, uuid, hy2_password, enabled,
-		        traffic_up, traffic_down, traffic_limit, expires_at, created_at, updated_at
-		 FROM users WHERE username = ? AND hy2_password = ? AND enabled = 1`, username, password,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.UUID, &u.Hy2Password, &u.Enabled,
-		&u.TrafficUp, &u.TrafficDown, &u.TrafficLimit, &u.ExpiresAt, &u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return u, nil
-}
-
 // FindEnabledUserByHy2Auth is used by the Hy2 HTTP auth endpoint.
-// Hy2 sends the password in "auth" field; we use username:password format or just password.
 func (d *DB) FindEnabledUserByHy2Auth(authStr string) (*User, error) {
-	u := &User{}
-	err := d.conn.QueryRow(
-		`SELECT id, username, email, uuid, hy2_password, enabled,
-		        traffic_up, traffic_down, traffic_limit, expires_at, created_at, updated_at
-		 FROM users WHERE hy2_password = ? AND enabled = 1`, authStr,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.UUID, &u.Hy2Password, &u.Enabled,
-		&u.TrafficUp, &u.TrafficDown, &u.TrafficLimit, &u.ExpiresAt, &u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return u, nil
+	return scanUser(d.conn.QueryRow(
+		`SELECT `+userSelectFields+` FROM users WHERE hy2_password = ? AND enabled = 1`, authStr,
+	))
 }
