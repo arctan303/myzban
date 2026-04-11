@@ -11,6 +11,7 @@ async function nodeApi(address, adminToken, path, options = {}) {
     ...options,
     headers,
     cache: 'no-store',
+    signal: options.signal || AbortSignal.timeout(5000),
   });
 
   if (!res.ok) {

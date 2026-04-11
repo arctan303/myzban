@@ -9,6 +9,7 @@ export default function NodesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState(null);
   const [form, setForm] = useState({ name: '', address: '', admin_token: '' });
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
 
@@ -45,6 +46,7 @@ export default function NodesPage() {
       addr = `http://${addr}`;
     }
 
+    setIsSaving(true);
     try {
       const isEditing = editingNodeId !== null;
       const res = await authFetch('/api/nodes', {
@@ -68,7 +70,16 @@ export default function NodesPage() {
       fetchNodes();
     } catch (e) {
       setError(e.message);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const handleAddClick = () => {
+    setForm({ name: '', address: '', admin_token: '' });
+    setEditingNodeId(null);
+    setError('');
+    setShowModal(true);
   };
 
   const handleEditClick = (node) => {
@@ -96,7 +107,7 @@ export default function NodesPage() {
             <h2>节点管理</h2>
             <p>连接并管理远端的代理服务器集群</p>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+          <button className="btn btn-primary" onClick={handleAddClick}>
             + 添加节点
           </button>
         </div>
@@ -187,8 +198,10 @@ export default function NodesPage() {
                   onChange={(e) => setForm({ ...form, admin_token: e.target.value })} />
               </div>
               <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => { setShowModal(false); setEditingNodeId(null); }}>取消</button>
-                <button className="btn btn-primary" onClick={addNode}>{editingNodeId ? '保存并测试' : '检查并连接'}</button>
+                <button className="btn btn-secondary" onClick={() => { setShowModal(false); setEditingNodeId(null); }} disabled={isSaving}>取消</button>
+                <button className="btn btn-primary" onClick={addNode} disabled={isSaving}>
+                  {isSaving ? '正在测试并保存...' : (editingNodeId ? '保存并测试' : '检查并连接')}
+                </button>
               </div>
             </div>
           </div>
