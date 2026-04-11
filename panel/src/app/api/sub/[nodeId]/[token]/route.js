@@ -49,7 +49,7 @@ export async function GET(request, { params }) {
     udp: true
     tls: true
     network: tcp
-    servername: www.cloudflare.com
+    servername: ${nodeDetails.dest_domain || 'www.cloudflare.com'}
     client-fingerprint: chrome
     reality-opts:
       public-key: ${nodeDetails.xray_pub_key}
@@ -64,7 +64,7 @@ export async function GET(request, { params }) {
     password: ${user.hy2_password}
     up: 50 Mbps
     down: 100 Mbps
-    sni: www.cloudflare.com
+    sni: ${nodeDetails.dest_domain || 'www.cloudflare.com'}
     skip-cert-verify: true
     alpn:
       - h3`);

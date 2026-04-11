@@ -175,8 +175,15 @@ func (s *Server) handleNodeInfo(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Return safe node info (XrayPriKey and AdminToken hidden via json:"-")
-	jsonResp(w, http.StatusOK, nodeInfo)
+	// Return safe node info and dest_domain
+	resp := struct {
+		*db.NodeInfo
+		DestDomain string `json:"dest_domain"`
+	}{
+		NodeInfo:   nodeInfo,
+		DestDomain: s.cfg.DestDomain,
+	}
+	jsonResp(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleProxyInstall(w http.ResponseWriter, r *http.Request) {
