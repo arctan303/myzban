@@ -97,7 +97,7 @@ func (d *DB) migrate() error {
 			admin_token TEXT NOT NULL DEFAULT ''
 		)`,
 		`INSERT OR IGNORE INTO node_info (id) VALUES (1)`,
-		`INSERT OR IGNORE INTO proxy_configs (protocol, port) VALUES ('vless', 443)`,
+		`INSERT OR IGNORE INTO proxy_configs (protocol, port) VALUES ('vless', 8443)`,
 		`INSERT OR IGNORE INTO proxy_configs (protocol, port) VALUES ('hysteria2', 8443)`,
 		`CREATE INDEX IF NOT EXISTS idx_traffic_logs_user ON traffic_logs(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_traffic_logs_time ON traffic_logs(record_at)`,
