@@ -74,11 +74,24 @@ export async function GET(request, { params }) {
       return new Response('No proxy protocols running on this node', { status: 503 });
     }
 
+    const proxyNames = [];
+    if (status.vless?.installed && status.vless?.running) proxyNames.push(`"${user.username}-TCP"`);
+    if (status.hysteria2?.installed && status.hysteria2?.running) proxyNames.push(`"${user.username}-UDP"`);
+
     const yaml = `# ProxyNode Manager - ${user.username}
 # Generated from Panel for Node: ${node.name}
 
 proxies:
 ${proxies.join('\n')}
+
+proxy-groups:
+  - name: PROXIES
+    type: select
+    proxies:
+${proxyNames.map(n => `      - ${n}`).join('\n')}
+
+rules:
+  - MATCH,PROXIES
 `;
 
     return new Response(yaml, {
