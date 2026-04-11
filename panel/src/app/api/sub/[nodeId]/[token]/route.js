@@ -1,5 +1,5 @@
-import { getDb } from '../../../../lib/db';
-import { nodeApi } from '../../../../lib/nodeApi';
+import { getDb } from '../../../../../lib/db';
+import { nodeApi } from '../../../../../lib/nodeApi';
 
 export async function GET(request, { params }) {
   const { nodeId, token } = params;
