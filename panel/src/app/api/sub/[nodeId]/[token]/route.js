@@ -1,5 +1,6 @@
 import { getDb } from '../../../../../lib/db';
 import { nodeApi } from '../../../../../lib/nodeApi';
+import { promises as dns } from 'dns';
 
 export async function GET(request, { params }) {
   const { nodeId, token } = params;
@@ -37,7 +38,16 @@ export async function GET(request, { params }) {
     const status = await nodeApi(node.address, node.admin_token, '/api/v1/status');
     const nodeDetails = await nodeApi(node.address, node.admin_token, '/api/v1/node');
 
-    const serverHost = new URL(node.address).hostname;
+    let serverHost = new URL(node.address).hostname;
+    let resolvedIp = serverHost;
+    try {
+      const result = await dns.lookup(serverHost);
+      if (result && result.address) {
+        resolvedIp = result.address;
+      }
+    } catch (e) {
+      console.error(`DNS lookup failed for ${serverHost}:`, e.message);
+    }
 
     // 4. Generate YAML
     let proxies = [];
@@ -45,10 +55,9 @@ export async function GET(request, { params }) {
     if (status.vless?.installed && status.vless?.running) {
       proxies.push(`  - name: "${node.name}-TCP"
     type: vless
-    server: ${serverHost}
+    server: ${resolvedIp}
     port: ${status.vless.port}
     uuid: ${user.uuid}
-    udp: true
     tls: true
     flow: xtls-rprx-vision
     network: tcp
@@ -56,13 +65,13 @@ export async function GET(request, { params }) {
     client-fingerprint: chrome
     reality-opts:
       public-key: ${nodeDetails.xray_pub_key}
-      short-id: ${nodeDetails.short_id}`);
+      short-id: ${nodeDetails.short_id || ''}`);
     }
 
     if (status.hysteria2?.installed && status.hysteria2?.running) {
       proxies.push(`  - name: "${node.name}-UDP"
     type: hysteria2
-    server: ${serverHost}
+    server: ${resolvedIp}
     port: ${status.hysteria2.port}
     password: ${user.hy2_password}
     up: 50 Mbps

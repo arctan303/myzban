@@ -1,5 +1,6 @@
 import { getDb } from '../../../../../lib/db';
 import { nodeApi } from '../../../../../lib/nodeApi';
+import { promises as dns } from 'dns';
 
 export async function GET(request, { params }) {
   const { subToken } = params;
@@ -46,16 +47,24 @@ export async function GET(request, { params }) {
       const status = await nodeApi(node.address, node.admin_token, '/api/v1/status', {}, 3000);
       const nodeDetails = await nodeApi(node.address, node.admin_token, '/api/v1/node', {}, 3000);
 
-      const serverHost = new URL(node.address).hostname;
+      let serverHost = new URL(node.address).hostname;
+      let resolvedIp = serverHost;
+      try {
+        const result = await dns.lookup(serverHost);
+        if (result && result.address) {
+          resolvedIp = result.address;
+        }
+      } catch (e) {
+        console.error(`DNS lookup failed for ${serverHost}:`, e.message);
+      }
 
       if (status.vless?.installed && status.vless?.running) {
         const name = `${node.name}-TCP`;
         proxiesBlock.push(`  - name: "${name}"
     type: vless
-    server: ${serverHost}
+    server: ${resolvedIp}
     port: ${status.vless.port}
     uuid: ${user.uuid}
-    udp: true
     tls: true
     flow: xtls-rprx-vision
     network: tcp
@@ -63,7 +72,7 @@ export async function GET(request, { params }) {
     client-fingerprint: chrome
     reality-opts:
       public-key: ${nodeDetails.xray_pub_key}
-      short-id: ${nodeDetails.short_id}`);
+      short-id: ${nodeDetails.short_id || ''}`);
         proxyNamesBlock.push(`      - "${name}"`);
       }
 
@@ -71,7 +80,7 @@ export async function GET(request, { params }) {
         const name = `${node.name}-UDP`;
         proxiesBlock.push(`  - name: "${name}"
     type: hysteria2
-    server: ${serverHost}
+    server: ${resolvedIp}
     port: ${status.hysteria2.port}
     password: ${user.hy2_password}
     up: 1000 Mbps
