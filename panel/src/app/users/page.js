@@ -11,9 +11,9 @@ function formatBytes(bytes) {
 
 function Sidebar({ currentPage }) {
   const links = [
-    { href: '/', icon: '📊', label: 'Dashboard' },
-    { href: '/nodes', icon: '🖥️', label: 'Nodes' },
-    { href: '/users', icon: '👥', label: 'Users' },
+    { href: '/', icon: '📊', label: '控制台' },
+    { href: '/nodes', icon: '🖥️', label: '节点管理' },
+    { href: '/users', icon: '👥', label: '用户管理' },
   ];
   return (
     <nav className="sidebar">
@@ -114,9 +114,9 @@ export default function UsersPage() {
   };
 
   const deleteUser = async (username) => {
-    if (!confirm(`Delete user "${username}"?`)) return;
+    if (!confirm(`确认要删除代理用户 "${username}" 吗？`)) return;
     await nodeRequest(selectedNode.id, 'DELETE', `/api/v1/users/${username}`);
-    showToast(`User "${username}" deleted`);
+    showToast(`用户 "${username}" 已删除`);
     fetchUsers();
   };
 
@@ -144,7 +144,7 @@ export default function UsersPage() {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    showToast('Copied to clipboard!');
+    showToast('已复制到剪贴板！');
   };
 
   return (
@@ -153,8 +153,8 @@ export default function UsersPage() {
       <main className="main-content">
         <div className="page-header page-header-row">
           <div>
-            <h2>Users</h2>
-            <p>Manage users on your proxy nodes</p>
+            <h2>用户管理</h2>
+            <p>为你的代理节点分配和管理使用者</p>
           </div>
           <div className="btn-group">
             {nodes.length > 1 && (
@@ -166,36 +166,36 @@ export default function UsersPage() {
             )}
             <button className="btn btn-primary" onClick={() => setShowAddModal(true)}
               disabled={!selectedNode}>
-              + Add User
+              + 新建用户
             </button>
           </div>
         </div>
 
         {loading ? (
-          <div className="loading"><div className="spinner"></div>Loading...</div>
+          <div className="loading"><div className="spinner"></div>正在加载...</div>
         ) : !selectedNode ? (
           <div className="empty-state">
             <div className="icon">🖥️</div>
-            <h3>No online nodes</h3>
-            <p>Add and connect a node first.</p>
+            <h3>没有可用的在线节点</h3>
+            <p>请先在「节点管理」中配对连通一台服务器。</p>
           </div>
         ) : users.length === 0 ? (
           <div className="empty-state">
             <div className="icon">👥</div>
-            <h3>No users on this node</h3>
-            <p>Click "Add User" to create one.</p>
+            <h3>这台节点下暂无用户</h3>
+            <p>点击上方 "新建用户" 按钮立刻创建。</p>
           </div>
         ) : (
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <th>Username</th>
-                  <th>Status</th>
-                  <th>Upload</th>
-                  <th>Download</th>
-                  <th>Total</th>
-                  <th>Actions</th>
+                  <th>使用者账号</th>
+                  <th>状态</th>
+                  <th>已上传</th>
+                  <th>已下载</th>
+                  <th>总用量</th>
+                  <th>常规操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -205,7 +205,7 @@ export default function UsersPage() {
                     <td>
                       <span className={`badge ${u.enabled ? 'badge-success' : 'badge-danger'}`}>
                         <span className="badge-dot"></span>
-                        {u.enabled ? 'Active' : 'Disabled'}
+                        {u.enabled ? '正常启用' : '已停用禁用'}
                       </span>
                     </td>
                     <td>{formatBytes(u.traffic_up)}</td>
@@ -214,16 +214,16 @@ export default function UsersPage() {
                     <td>
                       <div className="btn-group">
                         <button className="btn btn-secondary btn-sm" onClick={() => viewUserInfo(u)}>
-                          Info
+                          详情/订阅
                         </button>
                         <button
                           className={`btn btn-sm ${u.enabled ? 'btn-danger' : 'btn-success'}`}
                           onClick={() => toggleUser(u.username, u.enabled)}
                         >
-                          {u.enabled ? 'Disable' : 'Enable'}
+                          {u.enabled ? '停用' : '启用'}
                         </button>
                         <button className="btn btn-secondary btn-sm" onClick={() => resetTraffic(u.username)}>
-                          Reset
+                          清空流量
                         </button>
                         <button className="btn btn-danger btn-sm" onClick={() => deleteUser(u.username)}>
                           ✕
@@ -237,44 +237,42 @@ export default function UsersPage() {
           </div>
         )}
 
-        {/* Add User Modal */}
         {showAddModal && (
           <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <h3>Add User</h3>
+              <h3>新建代理用户</h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '20px' }}>
-                Node: {selectedNode?.name}
+                将下发至节点：{selectedNode?.name}
               </p>
               <div className="form-group">
-                <label>Username</label>
-                <input className="form-input" placeholder="e.g. alice"
+                <label>使用者标识(纯字母)</label>
+                <input className="form-input" placeholder="例如：alice, iphone"
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addUser()} />
               </div>
               <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowAddModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={addUser}>Create</button>
+                <button className="btn btn-secondary" onClick={() => setShowAddModal(false)}>取消</button>
+                <button className="btn btn-primary" onClick={addUser}>创建下发</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* User Info Modal */}
         {showInfoModal && selectedUser && (
           <div className="modal-overlay" onClick={() => setShowInfoModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-              <h3>User: {selectedUser.username}</h3>
+              <h3>使用者详情：{selectedUser.username}</h3>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>VLESS UUID</label>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>VLESS 专用 UUID 凭证</label>
                   <div className="copy-text" onClick={() => copyToClipboard(selectedUser.uuid)}>
                     {selectedUser.uuid}
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Hy2 Password</label>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Hysteria 2 专用密码</label>
                   <div className="copy-text" onClick={() => copyToClipboard(selectedUser.hy2_password)}>
                     {selectedUser.hy2_password}
                   </div>
@@ -283,7 +281,7 @@ export default function UsersPage() {
 
               {selectedUser.sub_token && (
                 <div style={{ marginBottom: '20px' }}>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Subscription URL</label>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>一键订阅链接 (导入各类客户端)</label>
                   <div className="copy-text" style={{ maxWidth: '100%' }}
                     onClick={() => copyToClipboard(`${window.location.origin}/api/sub/${selectedNode?.id}/${selectedUser.sub_token}`)}>
                     {window.location.origin}/api/sub/{selectedNode?.id}/{selectedUser.sub_token}
@@ -292,7 +290,7 @@ export default function UsersPage() {
               )}
 
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Clash Client Config (YAML)</label>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Clash / Meta 裸客户端配置 (自动生成)</label>
                 <pre style={{
                   background: 'var(--bg-primary)',
                   border: '1px solid var(--border)',
@@ -311,9 +309,9 @@ export default function UsersPage() {
               </div>
 
               <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowInfoModal(false)}>Close</button>
+                <button className="btn btn-secondary" onClick={() => setShowInfoModal(false)}>关闭</button>
                 <button className="btn btn-primary" onClick={() => copyToClipboard(userConfig)}>
-                  Copy Config
+                  一键拷贝配置
                 </button>
               </div>
             </div>

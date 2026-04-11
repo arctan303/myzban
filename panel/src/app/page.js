@@ -11,9 +11,9 @@ function formatBytes(bytes) {
 
 function Sidebar({ currentPage }) {
   const links = [
-    { href: '/', icon: '📊', label: 'Dashboard' },
-    { href: '/nodes', icon: '🖥️', label: 'Nodes' },
-    { href: '/users', icon: '👥', label: 'Users' },
+    { href: '/', icon: '📊', label: '控制台' },
+    { href: '/nodes', icon: '🖥️', label: '节点管理' },
+    { href: '/users', icon: '👥', label: '用户管理' },
   ];
 
   return (
@@ -71,43 +71,43 @@ export default function DashboardPage() {
       <Sidebar currentPage="/" />
       <main className="main-content">
         <div className="page-header">
-          <h2>Dashboard</h2>
-          <p>Overview of all managed proxy nodes</p>
+          <h2>控制台概览</h2>
+          <p>所有代理节点的监控运行状态</p>
         </div>
 
         <div className="card-grid">
           <div className="stat-card">
-            <div className="stat-label">Total Nodes</div>
+            <div className="stat-label">总节点数</div>
             <div className="stat-value">{nodes.length}</div>
-            <div className="stat-sub">{onlineNodes} online</div>
+            <div className="stat-sub">{onlineNodes} 在线运行</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Total Users</div>
+            <div className="stat-label">总用户数</div>
             <div className="stat-value">{totalUsers}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Total Traffic</div>
+            <div className="stat-label">消耗总流量</div>
             <div className="stat-value">{formatBytes(totalUp + totalDown)}</div>
             <div className="stat-sub">↑ {formatBytes(totalUp)} ↓ {formatBytes(totalDown)}</div>
           </div>
         </div>
 
         <div className="page-header">
-          <h2 style={{ fontSize: '20px' }}>Nodes</h2>
+          <h2 style={{ fontSize: '20px' }}>服务器集群</h2>
         </div>
 
         {loading ? (
           <div className="loading">
             <div className="spinner"></div>
-            Loading nodes...
+            正在加载节点数据...
           </div>
         ) : nodes.length === 0 ? (
           <div className="empty-state">
             <div className="icon">🖥️</div>
-            <h3>No nodes connected</h3>
-            <p>Go to the Nodes page to add your first node.</p>
+            <h3>暂未接入任何节点</h3>
+            <p>请前往「节点管理」页面接入你的第一台代理服务器。</p>
             <a href="/nodes" className="btn btn-primary" style={{ marginTop: '16px' }}>
-              Add Node
+              添加节点
             </a>
           </div>
         ) : (
@@ -121,7 +121,7 @@ export default function DashboardPage() {
                   </div>
                   <span className={`badge ${node.online ? 'badge-success' : 'badge-danger'}`}>
                     <span className="badge-dot"></span>
-                    {node.online ? 'Online' : 'Offline'}
+                    {node.online ? '在线运行可用' : '离线/失联'}
                   </span>
                 </div>
 
@@ -138,15 +138,15 @@ export default function DashboardPage() {
 
                     <div className="node-stats">
                       <div className="node-stat-item">
-                        <div className="label">Users</div>
+                        <div className="label">承载用户</div>
                         <div className="value">{node.status.total_users}</div>
                       </div>
                       <div className="node-stat-item">
-                        <div className="label">Upload</div>
+                        <div className="label">上行流量</div>
                         <div className="value">{formatBytes(node.status.total_upload)}</div>
                       </div>
                       <div className="node-stat-item">
-                        <div className="label">Download</div>
+                        <div className="label">下行流量</div>
                         <div className="value">{formatBytes(node.status.total_download)}</div>
                       </div>
                     </div>

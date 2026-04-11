@@ -3,9 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 
 function Sidebar({ currentPage }) {
   const links = [
-    { href: '/', icon: '📊', label: 'Dashboard' },
-    { href: '/nodes', icon: '🖥️', label: 'Nodes' },
-    { href: '/users', icon: '👥', label: 'Users' },
+    { href: '/', icon: '📊', label: '控制台' },
+    { href: '/nodes', icon: '🖥️', label: '节点管理' },
+    { href: '/users', icon: '👥', label: '用户管理' },
   ];
   return (
     <nav className="sidebar">
@@ -58,7 +58,7 @@ export default function NodesPage() {
   const addNode = async () => {
     setError('');
     if (!form.name || !form.address || !form.admin_token) {
-      setError('All fields are required');
+      setError('所有字段均为必填项目');
       return;
     }
 
@@ -81,7 +81,7 @@ export default function NodesPage() {
       }
       setShowModal(false);
       setForm({ name: '', address: '', admin_token: '' });
-      showToast('Node added successfully!');
+      showToast('节点添加成功！');
       fetchNodes();
     } catch (e) {
       setError(e.message);
@@ -89,9 +89,9 @@ export default function NodesPage() {
   };
 
   const deleteNode = async (id, name) => {
-    if (!confirm(`Delete node "${name}"?`)) return;
+    if (!confirm(`确实要删除节点 "${name}" 吗？该操作不可逆转！`)) return;
     await fetch(`/api/nodes?id=${id}`, { method: 'DELETE' });
-    showToast('Node removed');
+    showToast('节点已移除');
     fetchNodes();
   };
 
@@ -101,34 +101,34 @@ export default function NodesPage() {
       <main className="main-content">
         <div className="page-header page-header-row">
           <div>
-            <h2>Nodes</h2>
-            <p>Manage your proxy server nodes</p>
+            <h2>节点管理</h2>
+            <p>连接并管理远端的代理服务器集群</p>
           </div>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            + Add Node
+            + 添加节点
           </button>
         </div>
 
         {loading ? (
-          <div className="loading"><div className="spinner"></div>Loading...</div>
+          <div className="loading"><div className="spinner"></div>正在加载...</div>
         ) : nodes.length === 0 ? (
           <div className="empty-state">
             <div className="icon">🖥️</div>
-            <h3>No nodes yet</h3>
-            <p>Add your first node to get started.</p>
+            <h3>当前还没有节点</h3>
+            <p>点击上方按钮添加你的第一台服务器。</p>
           </div>
         ) : (
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Address</th>
-                  <th>Status</th>
-                  <th>VLESS</th>
-                  <th>Hy2</th>
-                  <th>Users</th>
-                  <th>Actions</th>
+                  <th>别名</th>
+                  <th>连接地址</th>
+                  <th>健康状态</th>
+                  <th>VLESS 协议</th>
+                  <th>Hy2 协议</th>
+                  <th>承载用户数</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -139,27 +139,27 @@ export default function NodesPage() {
                     <td>
                       <span className={`badge ${node.online ? 'badge-success' : 'badge-danger'}`}>
                         <span className="badge-dot"></span>
-                        {node.online ? 'Online' : 'Offline'}
+                        {node.online ? '在线可用' : '离线/失联'}
                       </span>
                     </td>
                     <td>
                       {node.status?.vless?.installed ? (
                         <span className={`badge ${node.status.vless.running ? 'badge-success' : 'badge-warning'}`}>
-                          {node.status.vless.running ? 'Running' : 'Stopped'}
+                          {node.status.vless.running ? '运行中' : '已停止'}
                         </span>
                       ) : <span className="badge">—</span>}
                     </td>
                     <td>
                       {node.status?.hysteria2?.installed ? (
                         <span className={`badge ${node.status.hysteria2.running ? 'badge-success' : 'badge-warning'}`}>
-                          {node.status.hysteria2.running ? 'Running' : 'Stopped'}
+                          {node.status.hysteria2.running ? '运行中' : '已停止'}
                         </span>
                       ) : <span className="badge">—</span>}
                     </td>
                     <td>{node.status?.total_users || 0}</td>
                     <td>
                       <button className="btn btn-danger btn-sm" onClick={() => deleteNode(node.id, node.name)}>
-                        Delete
+                        移除
                       </button>
                     </td>
                   </tr>
@@ -172,26 +172,26 @@ export default function NodesPage() {
         {showModal && (
           <div className="modal-overlay" onClick={() => setShowModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <h3>Add Node</h3>
+              <h3>添加新节点</h3>
               {error && <div style={{ color: 'var(--danger)', fontSize: '14px', marginBottom: '16px' }}>{error}</div>}
               <div className="form-group">
-                <label>Name</label>
-                <input className="form-input" placeholder="e.g. US-West-1" value={form.name}
+                <label>给节点起个易记的名称</label>
+                <input className="form-input" placeholder="例如：美国硅谷高级优化线路" value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
               <div className="form-group">
-                <label>Address (IP:Port)</label>
-                <input className="form-input" placeholder="e.g. 16.148.174.149:9090" value={form.address}
+                <label>通信地址 (IP:端口)</label>
+                <input className="form-input" placeholder="例如：16.148.174.149:9090" value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })} />
               </div>
               <div className="form-group">
-                <label>Admin Token</label>
-                <input className="form-input" placeholder="from: pnm token show" value={form.admin_token}
+                <label>管理员凭证 (Admin Token)</label>
+                <input className="form-input" placeholder="在远端运行 pnm token show 获取" value={form.admin_token}
                   onChange={(e) => setForm({ ...form, admin_token: e.target.value })} />
               </div>
               <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={addNode}>Connect</button>
+                <button className="btn btn-secondary" onClick={() => setShowModal(false)}>取消</button>
+                <button className="btn btn-primary" onClick={addNode}>检查并连接</button>
               </div>
             </div>
           </div>
