@@ -31,10 +31,21 @@ echo -e "${GREEN}架构: ${ARCH} (${GOARCH})${NC}"
 
 # Download binary
 echo -e "${GREEN}[1/3] 下载 pnm...${NC}"
-# TODO: Replace with actual release URL
+# TODO: Replace with actual release URL and checksum verification
 DOWNLOAD_URL="https://github.com/pnm/proxy-node-manager/releases/latest/download/pnm-linux-${GOARCH}"
-wget -O /usr/local/bin/pnm "$DOWNLOAD_URL" 2>/dev/null || {
-    echo -e "${YELLOW}下载失败，尝试从本地构建...${NC}"
+CHECKSUM_URL="${DOWNLOAD_URL}.sha256"
+
+if wget -O /usr/local/bin/pnm "$DOWNLOAD_URL" 2>/dev/null && wget -O /tmp/pnm.sha256 "$CHECKSUM_URL" 2>/dev/null; then
+    echo "验证证书..."
+    cd /usr/local/bin
+    if ! sha256sum -c /tmp/pnm.sha256; then
+        echo -e "${RED}文件哈希校验失败，存在安全风险！${NC}"
+        rm -f /usr/local/bin/pnm /tmp/pnm.sha256
+        exit 1
+    fi
+    rm -f /tmp/pnm.sha256
+else
+    echo -e "${YELLOW}下载或校验文件获取失败，尝试从本地构建...${NC}"
     # If Go is installed, build from source
     if command -v go &> /dev/null; then
         echo "从源码构建..."

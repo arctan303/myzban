@@ -1,6 +1,8 @@
 package installer
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
@@ -33,13 +35,13 @@ func (x *XrayInstaller) Install() error {
 	}
 
 	fmt.Println("[1/5] Installing dependencies...")
-	if _, err := runShell("apt update -y && apt install -y curl wget sudo openssl"); err != nil {
-		return fmt.Errorf("install dependencies: %w", err)
+	if _, err := runCmd("apt", "update", "-y"); err == nil {
+		runCmd("apt", "install", "-y", "curl", "wget", "sudo")
 	}
 
 	fmt.Println("[2/5] Installing Xray v1.8.24...")
 	script := `bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root --version v1.8.24`
-	if _, err := runShell(script); err != nil {
+	if _, err := runCmd("bash", "-c", script); err != nil {
 		return fmt.Errorf("install xray: %w", err)
 	}
 
@@ -61,12 +63,12 @@ func (x *XrayInstaller) Install() error {
 		return fmt.Errorf("failed to parse x25519 keys from output:\n%s", keysOut)
 	}
 
-	// Generate short ID
-	shortIDOut, err := runShell("openssl rand -hex 8")
-	if err != nil {
+	// Generate short ID securely
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
 		return fmt.Errorf("generate shortid: %w", err)
 	}
-	shortID := strings.TrimSpace(shortIDOut)
+	shortID := hex.EncodeToString(b)
 
 	// Detect server IP
 	fmt.Println("[4/5] Detecting server IP...")
@@ -113,11 +115,11 @@ func (x *XrayInstaller) Install() error {
 
 // Uninstall removes Xray
 func (x *XrayInstaller) Uninstall() error {
-	if _, err := runShell("systemctl stop xray 2>/dev/null; systemctl disable xray 2>/dev/null"); err != nil {
-		// ignore errors
-	}
+	runCmd("systemctl", "stop", "xray")
+	runCmd("systemctl", "disable", "xray")
+	
 	script := `bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove --purge`
-	if _, err := runShell(script); err != nil {
+	if _, err := runCmd("bash", "-c", script); err != nil {
 		return fmt.Errorf("uninstall xray: %w", err)
 	}
 

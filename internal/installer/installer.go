@@ -2,9 +2,12 @@ package installer
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Installer is the interface for installing proxy software
@@ -47,22 +50,31 @@ func runCmd(name string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// runShell runs a command via bash
-func runShell(script string) (string, error) {
-	cmd := exec.Command("bash", "-c", script)
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
-
-// GetServerIP attempts to detect the public IPv4 address
+// GetServerIP attempts to detect the public IPv4 address securely natively
 func GetServerIP() (string, error) {
-	out, err := runShell("curl -4 -s --connect-timeout 5 ifconfig.me")
-	if err == nil && strings.TrimSpace(out) != "" {
-		return strings.TrimSpace(out), nil
+	client := &http.Client{Timeout: 5 * time.Second}
+	
+	resp, err := client.Get("https://api.ipify.org")
+	if err == nil {
+		defer resp.Body.Close()
+		if b, err := io.ReadAll(resp.Body); err == nil {
+			ip := strings.TrimSpace(string(b))
+			if ip != "" {
+				return ip, nil
+			}
+		}
 	}
-	out, err = runShell("curl -4 -s --connect-timeout 5 api.ipify.org")
-	if err == nil && strings.TrimSpace(out) != "" {
-		return strings.TrimSpace(out), nil
+
+	resp2, err2 := client.Get("https://ifconfig.me")
+	if err2 == nil {
+		defer resp2.Body.Close()
+		if b, err := io.ReadAll(resp2.Body); err == nil {
+			ip := strings.TrimSpace(string(b))
+			if ip != "" {
+				return ip, nil
+			}
+		}
 	}
-	return "", fmt.Errorf("failed to detect public IP")
+
+	return "", fmt.Errorf("failed to detect public IP natively")
 }

@@ -32,6 +32,9 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
+	// Limit open connections to prevent database locking in WAL mode
+	conn.SetMaxOpenConns(1)
+
 	d := &DB{conn: conn, path: path}
 	if err := d.migrate(); err != nil {
 		conn.Close()

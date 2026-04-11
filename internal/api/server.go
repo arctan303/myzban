@@ -21,8 +21,8 @@ type Server struct {
 	userService   *user.Service
 	xray          *proxy.XrayManager
 	hy2           *proxy.Hy2Manager
-	xrayInstaller *installer.XrayInstaller
-	hy2Installer  *installer.Hy2Installer
+	xrayInstaller installer.Installer
+	hy2Installer  installer.Installer
 }
 
 // NewServer creates a new API server
@@ -32,8 +32,8 @@ func NewServer(
 	userSvc *user.Service,
 	xray *proxy.XrayManager,
 	hy2 *proxy.Hy2Manager,
-	xrayInst *installer.XrayInstaller,
-	hy2Inst *installer.Hy2Installer,
+	xrayInst installer.Installer,
+	hy2Inst installer.Installer,
 ) *Server {
 	return &Server{
 		cfg:           cfg,
@@ -89,12 +89,9 @@ func (s *Server) adminAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Accept token from Authorization header or ?token= query param
+		// Accept token from Authorization header
 		token := r.Header.Get("Authorization")
 		token = strings.TrimPrefix(token, "Bearer ")
-		if token == "" {
-			token = r.URL.Query().Get("token")
-		}
 
 		if token != nodeInfo.AdminToken {
 			jsonError(w, http.StatusUnauthorized, "invalid admin token")
@@ -108,9 +105,15 @@ func (s *Server) adminAuth(next http.HandlerFunc) http.HandlerFunc {
 // withCORS adds CORS headers for panel access
 func withCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		// Strict CORS: Only allow explicit origins in production. 
+		// For now, allow known panel origins or fallback to strictest.
+		origin := r.Header.Get("Origin")
+		if origin == "http://localhost:3000" || origin == "http://127.0.0.1:3000" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -197,12 +200,14 @@ func (s *Server) handleProxyInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	switch req.Protocol {
-	case "vless":
-		if err := s.xrayInstaller.Install(); err != nil {
+		rlog.Printf("[ERROR] Xray install failed: %v", err)
+			jsonError(w, http.StatusInternalServerError, "failed to install Xray")
+			return
+		}
+	case "hysteria2":
+		if err := s.hy2Installer.Install(); err != nil {
+			log.Printf("[ERROR] Hysteria2 install failed: %v", err)
+			jsonError(w, http.StatusInternalServerError, "failed to install Hysteria2"
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -246,7 +251,8 @@ func (s *Server) handleProxyStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("[ERROR] Proxy start failed [%s]: %v", req.Protocol, err)
+		jsonError(w, http.StatusInternalServerError, "failed to start proxy service")
 		return
 	}
 	jsonResp(w, http.StatusOK, map[string]string{"status": "started"})
@@ -267,7 +273,8 @@ func (s *Server) handleProxyStop(w http.ResponseWriter, r *http.Request) {
 	switch req.Protocol {
 	case "vless":
 		err = s.xray.Stop()
-	case "hysteria2":
+	clog.Printf("[ERROR] Proxy stop failed [%s]: %v", req.Protocol, err)
+		jsonError(w, http.StatusInternalServerError, "failed to stop proxy service"
 		err = s.hy2.Stop()
 	default:
 		jsonError(w, http.StatusBadRequest, "unknown protocol")
