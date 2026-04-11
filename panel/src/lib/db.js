@@ -72,7 +72,7 @@ function getDb() {
   // Seed default YAML template if not exists
   const tmplExists = db.prepare("SELECT key FROM settings WHERE key = 'system_yaml_template'").get();
   if (!tmplExists) {
-    const defaultTemplate = \`# Clash Meta (Mihomo) 统一全局配置
+    const defaultTemplate = `# Clash Meta (Mihomo) 统一全局配置
 # 自动通过 Panel 融合节点生成
 port: 7890
 socks-port: 7891
@@ -185,7 +185,7 @@ rules:
   - DOMAIN-SUFFIX,baidu.com,DIRECT
   - DOMAIN-SUFFIX,bilibili.com,DIRECT
   - MATCH,🚀 节点选择
-\`;
+`;
     db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)")
       .run('system_yaml_template', defaultTemplate);
   }
