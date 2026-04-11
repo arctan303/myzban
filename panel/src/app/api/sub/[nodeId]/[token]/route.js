@@ -97,12 +97,15 @@ rules:
   - MATCH,PROXIES
 `;
 
+    const displayTotal = user.traffic_limit > 0 ? user.traffic_limit : 1000 * 1024 * 1024 * 1024 * 1024;
     return new Response(yaml, {
       status: 200,
       headers: {
         'Content-Type': 'text/yaml; charset=utf-8',
-        'Content-Disposition': `attachment; filename="clash-${user.username}.yaml"`,
-        'Profile-Update-Interval': '24'
+        'Content-Disposition': `attachment; filename=Node-${node.name}-${user.username}.yaml`,
+        'Profile-Update-Interval': '24',
+        'Subscription-Userinfo': `upload=${user.traffic_up}; download=${user.traffic_down}; total=${displayTotal}; expire=0`,
+        'profile-title': `PNM Node - ${node.name} - ${user.username}`
       }
     });
 

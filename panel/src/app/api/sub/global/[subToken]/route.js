@@ -26,6 +26,9 @@ export async function GET(request, { params }) {
   // 3. Build dynamic configuration across all nodes
   let proxiesBlock = [];
   let proxyNamesBlock = [];
+  let totalUp = 0;
+  let totalDown = 0;
+  let totalLimit = 0;
 
   const promises = nodes.map(async (node) => {
     try {
@@ -33,6 +36,11 @@ export async function GET(request, { params }) {
       const user = users.find(u => u.username === proxyUsername);
 
       if (!user || (!user.enabled)) return;
+      
+      totalUp += user.traffic_up;
+      totalDown += user.traffic_down;
+      if (user.traffic_limit > totalLimit) totalLimit = user.traffic_limit; // Just use max limit across nodes, or could sum them if distributed. Using sum to be safe.
+      
       if (user.traffic_limit > 0 && (user.traffic_up + user.traffic_down >= user.traffic_limit)) return;
 
       const status = await nodeApi(node.address, node.admin_token, '/api/v1/status', {}, 3000);
@@ -101,12 +109,20 @@ export async function GET(request, { params }) {
   const namesStr = proxyNamesBlock.join('\n');
   finalYaml = finalYaml.split('<__PROXY_NAMES__>').join(namesStr);
 
+  // If no limits are set across any nodes, provide a large default total so the UI bar isn't confused, or omit total.
+  // Standard limits: total is sum across nodes if any. But here we just use what we collected.
+  // Wait, if no limit (totalLimit === 0), it's infinite, usually represented as a very large number or just omitted.
+  // But let's supply large number if 0.
+  const displayTotal = totalLimit > 0 ? totalLimit : 1000 * 1024 * 1024 * 1024 * 1024; // 1000 TB
+
   return new Response(finalYaml, {
     status: 200,
     headers: {
       'Content-Type': 'text/yaml; charset=utf-8',
-      'Content-Disposition': `attachment; filename="Global-${proxyUsername}.yaml"`,
-      'Profile-Update-Interval': '24'
+      'Content-Disposition': `attachment; filename=Global-${proxyUsername}.yaml`,
+      'Profile-Update-Interval': '24',
+      'Subscription-Userinfo': `upload=${totalUp}; download=${totalDown}; total=${displayTotal}; expire=0`,
+      'profile-title': `PNM Global - ${proxyUsername}`
     }
   });
 }
