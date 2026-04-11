@@ -14,6 +14,7 @@ export default function UsersPage() {
   const { ready } = useAdminAuth();
   const [nodes, setNodes] = useState([]);
   const [users, setUsers] = useState([]);
+  const [panelAccounts, setPanelAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
@@ -46,6 +47,7 @@ export default function UsersPage() {
   const fetchUsers = useCallback(async (currentNodes) => {
     setLoading(true);
     try {
+      // Fetch proxy users across all nodes
       const allResults = await Promise.all(
         currentNodes.map(async (n) => {
           const data = await nodeRequest(n.id, 'GET', '/api/v1/users');
@@ -53,6 +55,12 @@ export default function UsersPage() {
         })
       );
 
+      // Fetch panel accounts to get global sub_tokens
+      const panelRes = await authFetch('/api/panel-users');
+      const panelData = await panelRes.json();
+      setPanelAccounts(Array.isArray(panelData) ? panelData : []);
+
+      // Aggregate
       const aggregated = {};
       allResults.forEach(({ node, users }) => {
         users.forEach(u => {
@@ -73,7 +81,7 @@ export default function UsersPage() {
             traffic_up: u.traffic_up, 
             traffic_down: u.traffic_down,
             enabled: u.enabled,
-            sub_token: u.sub_token,
+            sub_token: u.sub_token, // Legacy node token
             uuid: u.uuid,
             hy2_password: u.hy2_password
           });
@@ -316,6 +324,27 @@ export default function UsersPage() {
                 <h3>👤 【{selectedUser.username}】 的资产版图</h3>
                 <h3 style={{ color: 'var(--accent)' }}>总计: {formatBytes(selectedUser.traffic_up + selectedUser.traffic_down)}</h3>
               </div>
+              
+              {(() => {
+                const pAcc = panelAccounts.find(p => p.proxy_username === selectedUser.username);
+                return pAcc && pAcc.sub_token ? (
+                  <div className="form-group" style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '8px', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '15px' }}>🌐 全局融合订阅链接</strong>
+                      <button onClick={() => copyToClipboard(`${window.location.origin}/api/sub/global/${pAcc.sub_token}`)} className="btn btn-primary btn-sm">
+                        🔗 一键复制订阅 (Clash)
+                      </button>
+                    </div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '8px 0 0 0' }}>
+                      该订阅链接返回系统配置的**统一样板**，并自动灌入该用户在全网所有节点的可用代理配置。随时保持最新！
+                    </p>
+                  </div>
+                ) : (
+                  <div className="alert-info" style={{ marginBottom: '16px', fontSize: '13px' }}>
+                    尚无全局订阅链接：该代理账号没有绑定的“面板系统账号”。请在新建用户时勾选“生成面板账号”。
+                  </div>
+                );
+              })()}
 
               <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 <table style={{ minWidth: '100%' }}>
@@ -324,7 +353,7 @@ export default function UsersPage() {
                       <th>节点名称</th>
                       <th>占用流量</th>
                       <th>状态</th>
-                      <th>订阅链接 / 凭证</th>
+                      <th>单点配置鉴权凭证</th>
                       <th>操作</th>
                     </tr>
                   </thead>
@@ -342,11 +371,11 @@ export default function UsersPage() {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                              {n.enabled ? (
                                <>
-                                  <button onClick={() => copyToClipboard(`${window.location.origin}/api/sub/${n.nodeId}/${n.sub_token}`)} className="copy-text">
-                                     🔗 复制订阅链接
-                                  </button>
                                   <button onClick={() => copyToClipboard(n.uuid)} className="copy-text" style={{ borderColor: 'var(--text-muted)' }}>
                                      VLESS UUID
+                                  </button>
+                                  <button onClick={() => copyToClipboard(n.hy2_password)} className="copy-text" style={{ borderColor: 'var(--text-muted)' }}>
+                                     Hy2 Password
                                   </button>
                                </>
                              ) : (

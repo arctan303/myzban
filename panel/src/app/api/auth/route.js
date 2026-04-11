@@ -25,6 +25,7 @@ export async function POST(request) {
     username: user.username,
     role: user.role,
     proxy_username: user.proxy_username,
+    sub_token: user.sub_token,
   });
 
   return Response.json({
@@ -34,6 +35,7 @@ export async function POST(request) {
       username: user.username,
       role: user.role,
       proxy_username: user.proxy_username,
+      sub_token: user.sub_token,
     },
   });
 }

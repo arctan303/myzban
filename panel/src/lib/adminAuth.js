@@ -92,6 +92,7 @@ export function AdminSidebar({ currentPage }) {
     { href: '/', icon: '📊', label: '控制台' },
     { href: '/nodes', icon: '🖥️', label: '节点管理' },
     { href: '/users', icon: '👥', label: '用户管理' },
+    { href: '/settings', icon: '⚙️', label: '系统设置' },
   ];
 
   const logout = () => {

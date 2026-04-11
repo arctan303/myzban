@@ -132,6 +132,23 @@ export default function MyPage() {
               </div>
             </div>
 
+            {/* Global Subscription Link */}
+            {user.sub_token && (
+              <div className="card" style={{ marginBottom: '16px', borderLeft: '4px solid var(--primary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--primary)' }}>🌐 你的专属全局订阅链接</h3>
+                    <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      一键复制下方链接填入 Clash 等客户端。我们会动态地将所有节点合并到这一个节点池中。
+                    </p>
+                  </div>
+                  <button onClick={() => copyToClipboard(`${window.location.origin}/api/sub/global/${user.sub_token}`)} className="btn btn-primary">
+                    🔗 复制链接
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Node Details */}
             {data.nodes.map((node) => (
               <div key={node.node_id} className="card" style={{ marginBottom: '16px' }}>
@@ -148,16 +165,6 @@ export default function MyPage() {
                     <div style={{ fontWeight: 700, fontSize: '18px' }}>{formatBytes(node.traffic_up + node.traffic_down)}</div>
                   </div>
                 </div>
-
-                {/* Subscription link */}
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>一键订阅链接（Clash / Stash / Meta）</label>
-                  <div className="copy-text" style={{ maxWidth: '100%', marginTop: '6px' }}
-                    onClick={() => copyToClipboard(`${window.location.origin}/api/sub/${node.node_id}/${node.sub_token}`)}>
-                    {window.location.origin}/api/sub/{node.node_id}/{node.sub_token}
-                  </div>
-                </div>
-
                 {/* Credentials */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   {node.uuid && (

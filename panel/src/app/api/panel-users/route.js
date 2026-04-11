@@ -6,6 +6,7 @@ import { getDb } from '../../../lib/db';
 import { requireAdmin } from '../../../lib/auth';
 
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 export async function GET(request) {
   const admin = requireAdmin(request);
@@ -15,7 +16,7 @@ export async function GET(request) {
 
   const db = getDb();
   const users = db.prepare(
-    'SELECT id, username, role, proxy_username, created_at FROM panel_users ORDER BY id'
+    'SELECT id, username, role, proxy_username, sub_token, created_at FROM panel_users ORDER BY id'
   ).all();
 
   return Response.json(users);
@@ -42,15 +43,17 @@ export async function POST(request) {
   }
 
   const hash = bcrypt.hashSync(password, 10);
+  const subToken = crypto.randomBytes(16).toString('hex');
   const result = db.prepare(
-    'INSERT INTO panel_users (username, password_hash, role, proxy_username) VALUES (?, ?, ?, ?)'
-  ).run(username, hash, finalRole, proxy_username || null);
+    'INSERT INTO panel_users (username, password_hash, role, proxy_username, sub_token) VALUES (?, ?, ?, ?, ?)'
+  ).run(username, hash, finalRole, proxy_username || null, subToken);
 
   return Response.json({
     id: result.lastInsertRowid,
     username,
     role: finalRole,
     proxy_username: proxy_username || null,
+    sub_token: subToken,
   }, { status: 201 });
 }
 
