@@ -5,8 +5,7 @@ services:
     build: .
     container_name: pnm-panel
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    network_mode: host
     volumes:
       - panel-data:/data
     environment:
