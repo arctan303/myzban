@@ -79,6 +79,7 @@ type xrayRoutingRule struct {
 type vlessClient struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
+	Flow  string `json:"flow"`
 }
 
 type vlessSettings struct {
@@ -123,6 +124,7 @@ func (x *XrayManager) GenerateConfig(users []*db.User) error {
 			clients = append(clients, vlessClient{
 				ID:    u.UUID,
 				Email: u.Email,
+				Flow:  "xtls-rprx-vision",
 			})
 		}
 	}
@@ -132,6 +134,7 @@ func (x *XrayManager) GenerateConfig(users []*db.User) error {
 		clients = []vlessClient{{
 			ID:    "00000000-0000-0000-0000-000000000000",
 			Email: "placeholder@pnm",
+			Flow:  "xtls-rprx-vision",
 		}}
 	}
 

@@ -41,13 +41,14 @@ export async function GET(request, { params }) {
     let proxies = [];
 
     if (status.vless?.installed && status.vless?.running) {
-      proxies.push(`  - name: "🇺🇸 ${node.name}-TCP"
+      proxies.push(`  - name: "${node.name}-TCP"
     type: vless
     server: ${nodeDetails.server_ip}
     port: ${status.vless.port}
     uuid: ${user.uuid}
     udp: true
     tls: true
+    flow: xtls-rprx-vision
     network: tcp
     servername: ${nodeDetails.dest_domain || 'www.cloudflare.com'}
     client-fingerprint: chrome
@@ -57,7 +58,7 @@ export async function GET(request, { params }) {
     }
 
     if (status.hysteria2?.installed && status.hysteria2?.running) {
-      proxies.push(`  - name: "🇺🇸 ${node.name}-UDP"
+      proxies.push(`  - name: "${node.name}-UDP"
     type: hysteria2
     server: ${nodeDetails.server_ip}
     port: ${status.hysteria2.port}
@@ -75,8 +76,8 @@ export async function GET(request, { params }) {
     }
 
     const proxyNames = [];
-    if (status.vless?.installed && status.vless?.running) proxyNames.push(`"🇺🇸 ${node.name}-TCP"`);
-    if (status.hysteria2?.installed && status.hysteria2?.running) proxyNames.push(`"🇺🇸 ${node.name}-UDP"`);
+    if (status.vless?.installed && status.vless?.running) proxyNames.push(`"${node.name}-TCP"`);
+    if (status.hysteria2?.installed && status.hysteria2?.running) proxyNames.push(`"${node.name}-UDP"`);
 
     const yaml = `# ProxyNode Manager - ${user.username}
 # Generated from Panel for Node: ${node.name}

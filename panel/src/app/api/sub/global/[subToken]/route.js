@@ -39,7 +39,7 @@ export async function GET(request, { params }) {
       const nodeDetails = await nodeApi(node.address, node.admin_token, '/api/v1/node', {}, 3000);
 
       if (status.vless?.installed && status.vless?.running) {
-        const name = `\uD83C\uDDFA\uD83C\uDDF8 ${node.name}-TCP`;
+        const name = `${node.name}-TCP`;
         proxiesBlock.push(`  - name: "${name}"
     type: vless
     server: ${nodeDetails.server_ip}
@@ -47,6 +47,7 @@ export async function GET(request, { params }) {
     uuid: ${user.uuid}
     udp: true
     tls: true
+    flow: xtls-rprx-vision
     network: tcp
     servername: ${nodeDetails.dest_domain || 'www.cloudflare.com'}
     client-fingerprint: chrome
@@ -57,7 +58,7 @@ export async function GET(request, { params }) {
       }
 
       if (status.hysteria2?.installed && status.hysteria2?.running) {
-        const name = `\uD83C\uDDFA\uD83C\uDDF8 ${node.name}-UDP`;
+        const name = `${node.name}-UDP`;
         proxiesBlock.push(`  - name: "${name}"
     type: hysteria2
     server: ${nodeDetails.server_ip}

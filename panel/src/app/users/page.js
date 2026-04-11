@@ -24,6 +24,7 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [toast, setToast] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [resetPwd, setResetPwd] = useState('');
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -162,6 +163,35 @@ export default function UsersPage() {
     fetchUsers(nodes);
     // UI hack to close modal so it refreshes properly with new node info
     setShowInfoModal(false);
+  };
+
+  const handeResetPassword = async (panelAccountId) => {
+    if (!resetPwd || resetPwd.length < 4) {
+      showToast('新密码长度不能少于 4 位', 'error');
+      return;
+    }
+    const pAcc = panelAccounts.find(p => p.id === panelAccountId);
+    if (!pAcc) return;
+    try {
+      const res = await authFetch('/api/panel-users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: pAcc.id,
+          username: pAcc.username,
+          new_password: resetPwd
+        })
+      });
+      if (res.ok) {
+        showToast('面板账号密码修改成功！');
+        setResetPwd('');
+      } else {
+        const data = await res.json();
+        showToast(data.error || '修改失败', 'error');
+      }
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
   };
 
   // Syncs all existing users to any potentially missing node
@@ -335,9 +365,21 @@ export default function UsersPage() {
                         🔗 一键复制订阅 (Clash)
                       </button>
                     </div>
-                    <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '8px 0 0 0' }}>
+                    <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '8px 0 16px 0' }}>
                       该订阅链接返回系统配置的**统一样板**，并自动灌入该用户在全网所有节点的可用代理配置。随时保持最新！
                     </p>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>修改 {pAcc.username} 面板密码:</span>
+                      <input 
+                         type="text" 
+                         className="form-input" 
+                         style={{ width: '150px', padding: '4px 8px', fontSize: '13px' }}
+                         placeholder="输入新密码" 
+                         value={resetPwd}
+                         onChange={(e) => setResetPwd(e.target.value)} 
+                      />
+                      <button className="btn btn-secondary btn-sm" onClick={() => handeResetPassword(pAcc.id)}>保存新密码</button>
+                    </div>
                   </div>
                 ) : (
                   <div className="alert-info" style={{ marginBottom: '16px', fontSize: '13px' }}>
