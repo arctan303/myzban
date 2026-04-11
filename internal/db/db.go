@@ -108,7 +108,7 @@ func (d *DB) migrate() error {
 
 	// Run ALTER TABLE migrations (ignore errors if columns already exist)
 	alters := []string{
-		`ALTER TABLE users ADD COLUMN sub_token TEXT UNIQUE NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN sub_token TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE node_info ADD COLUMN admin_token TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, a := range alters {
