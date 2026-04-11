@@ -1,33 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-
-function Sidebar({ currentPage }) {
-  const links = [
-    { href: '/', icon: '📊', label: '控制台' },
-    { href: '/nodes', icon: '🖥️', label: '节点管理' },
-    { href: '/users', icon: '👥', label: '用户管理' },
-  ];
-  return (
-    <nav className="sidebar">
-      <div className="sidebar-logo">
-        <h1>PNM Panel</h1>
-        <p>ProxyNode Manager</p>
-      </div>
-      <ul className="sidebar-nav">
-        {links.map((link) => (
-          <li key={link.href}>
-            <a href={link.href} className={currentPage === link.href ? 'active' : ''}>
-              <span className="nav-icon">{link.icon}</span>
-              {link.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
+import { useAdminAuth, AdminSidebar, authFetch } from '../../lib/adminAuth';
 
 export default function NodesPage() {
+  const { ready } = useAdminAuth();
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -69,7 +45,7 @@ export default function NodesPage() {
     }
 
     try {
-      const res = await fetch('/api/nodes', {
+      const res = await authFetch('/api/nodes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, address: addr }),
@@ -90,14 +66,16 @@ export default function NodesPage() {
 
   const deleteNode = async (id, name) => {
     if (!confirm(`确实要删除节点 "${name}" 吗？该操作不可逆转！`)) return;
-    await fetch(`/api/nodes?id=${id}`, { method: 'DELETE' });
+    await authFetch(`/api/nodes?id=${id}`, { method: 'DELETE' });
     showToast('节点已移除');
     fetchNodes();
   };
 
+  if (!ready) return null;
+
   return (
     <div className="app-layout">
-      <Sidebar currentPage="/nodes" />
+      <AdminSidebar currentPage="/nodes" />
       <main className="main-content">
         <div className="page-header page-header-row">
           <div>

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useAdminAuth, AdminSidebar, authFetch } from '../../lib/adminAuth';
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
@@ -9,33 +10,8 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function Sidebar({ currentPage }) {
-  const links = [
-    { href: '/', icon: '📊', label: '控制台' },
-    { href: '/nodes', icon: '🖥️', label: '节点管理' },
-    { href: '/users', icon: '👥', label: '用户管理' },
-  ];
-  return (
-    <nav className="sidebar">
-      <div className="sidebar-logo">
-        <h1>PNM Panel</h1>
-        <p>ProxyNode Manager</p>
-      </div>
-      <ul className="sidebar-nav">
-        {links.map((link) => (
-          <li key={link.href}>
-            <a href={link.href} className={currentPage === link.href ? 'active' : ''}>
-              <span className="nav-icon">{link.icon}</span>
-              {link.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
-
 export default function UsersPage() {
+  const { ready } = useAdminAuth();
   const [nodes, setNodes] = useState([]);
   const [selectedNode, setSelectedNode] = useState('all');
   const [users, setUsers] = useState([]);
@@ -52,10 +28,10 @@ export default function UsersPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Proxy request to a node through our panel API
+  // Proxy request to a node through our panel API (with auth)
   const nodeRequest = useCallback(async (nodeId, method, path, body = null) => {
     try {
-      const res = await fetch('/api/proxy', {
+      const res = await authFetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nodeId, method, path, body }),
@@ -200,9 +176,11 @@ export default function UsersPage() {
     showToast('已复制到剪贴板！');
   };
 
+  if (!ready) return null;
+
   return (
     <div className="app-layout">
-      <Sidebar currentPage="/users" />
+      <AdminSidebar currentPage="/users" />
       <main className="main-content">
         <div className="page-header page-header-row">
           <div>

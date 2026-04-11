@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useAdminAuth, AdminSidebar } from '../lib/adminAuth';
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
@@ -9,37 +10,8 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function Sidebar({ currentPage }) {
-  const links = [
-    { href: '/', icon: '📊', label: '控制台' },
-    { href: '/nodes', icon: '🖥️', label: '节点管理' },
-    { href: '/users', icon: '👥', label: '用户管理' },
-  ];
-
-  return (
-    <nav className="sidebar">
-      <div className="sidebar-logo">
-        <h1>PNM Panel</h1>
-        <p>ProxyNode Manager</p>
-      </div>
-      <ul className="sidebar-nav">
-        {links.map((link) => (
-          <li key={link.href}>
-            <a
-              href={link.href}
-              className={currentPage === link.href ? 'active' : ''}
-            >
-              <span className="nav-icon">{link.icon}</span>
-              {link.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
-
 export default function DashboardPage() {
+  const { ready } = useAdminAuth();
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,9 +38,11 @@ export default function DashboardPage() {
   const totalUp = nodes.reduce((sum, n) => sum + (n.status?.total_upload || 0), 0);
   const totalDown = nodes.reduce((sum, n) => sum + (n.status?.total_download || 0), 0);
 
+  if (!ready) return null;
+
   return (
     <div className="app-layout">
-      <Sidebar currentPage="/" />
+      <AdminSidebar currentPage="/" />
       <main className="main-content">
         <div className="page-header">
           <h2>控制台概览</h2>

@@ -2,6 +2,7 @@
 // POST /api/nodes — add a new node
 // DELETE /api/nodes?id=X — remove a node
 import { getDb } from '../../../lib/db';
+import { requireAdmin } from '../../../lib/auth';
 import { nodeApi } from '../../../lib/nodeApi';
 
 export async function GET() {
@@ -24,6 +25,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const admin = requireAdmin(request);
+  if (!admin) return Response.json({ error: 'Admin access required' }, { status: 403 });
+
   const { name, address, admin_token } = await request.json();
 
   if (!name || !address || !admin_token) {
@@ -44,6 +48,9 @@ export async function POST(request) {
 }
 
 export async function DELETE(request) {
+  const admin = requireAdmin(request);
+  if (!admin) return Response.json({ error: 'Admin access required' }, { status: 403 });
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 

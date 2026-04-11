@@ -1,4 +1,4 @@
-// Panel database — stores node registry (which nodes the panel manages)
+// Panel database — stores node registry and panel user accounts
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
@@ -18,7 +18,7 @@ function getDb() {
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
 
-  // Create tables
+  // Node registry
   db.exec(`
     CREATE TABLE IF NOT EXISTS nodes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,6 +29,7 @@ function getDb() {
     )
   `);
 
+  // Panel settings
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
@@ -36,10 +37,26 @@ function getDb() {
     )
   `);
 
-  // Default admin password
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('admin_password');
-  if (!row) {
-    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('admin_password', 'admin');
+  // Panel user accounts (for login)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS panel_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      proxy_username TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Seed default admin account if none exists
+  const adminExists = db.prepare('SELECT id FROM panel_users WHERE role = ?').get('admin');
+  if (!adminExists) {
+    const bcrypt = require('bcryptjs');
+    const hash = bcrypt.hashSync('admin', 10);
+    db.prepare(
+      'INSERT INTO panel_users (username, password_hash, role) VALUES (?, ?, ?)'
+    ).run('admin', hash, 'admin');
   }
 
   return db;

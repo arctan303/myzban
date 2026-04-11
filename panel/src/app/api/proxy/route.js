@@ -2,8 +2,12 @@
 // Body: { nodeId, method, path, body? }
 import { getDb } from '../../../lib/db';
 import { nodeApi } from '../../../lib/nodeApi';
+import { requireAdmin } from '../../../lib/auth';
 
 export async function POST(request) {
+  const admin = requireAdmin(request);
+  if (!admin) return Response.json({ error: 'Admin access required' }, { status: 403 });
+
   const { nodeId, method, path, body } = await request.json();
 
   const db = getDb();
