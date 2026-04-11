@@ -38,11 +38,13 @@ export async function GET(request, { params }) {
       const status = await nodeApi(node.address, node.admin_token, '/api/v1/status', {}, 3000);
       const nodeDetails = await nodeApi(node.address, node.admin_token, '/api/v1/node', {}, 3000);
 
+      const serverHost = new URL(node.address).hostname;
+
       if (status.vless?.installed && status.vless?.running) {
         const name = `${node.name}-TCP`;
         proxiesBlock.push(`  - name: "${name}"
     type: vless
-    server: ${nodeDetails.server_ip}
+    server: ${serverHost}
     port: ${status.vless.port}
     uuid: ${user.uuid}
     udp: true
@@ -61,7 +63,7 @@ export async function GET(request, { params }) {
         const name = `${node.name}-UDP`;
         proxiesBlock.push(`  - name: "${name}"
     type: hysteria2
-    server: ${nodeDetails.server_ip}
+    server: ${serverHost}
     port: ${status.hysteria2.port}
     password: ${user.hy2_password}
     up: 1000 Mbps

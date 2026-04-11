@@ -7,6 +7,7 @@ export default function NodesPage() {
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingNodeId, setEditingNodeId] = useState(null);
   const [form, setForm] = useState({ name: '', address: '', admin_token: '' });
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
@@ -45,10 +46,15 @@ export default function NodesPage() {
     }
 
     try {
+      const isEditing = editingNodeId !== null;
       const res = await authFetch('/api/nodes', {
-        method: 'POST',
+        method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, address: addr }),
+        body: JSON.stringify({
+          ...(isEditing && { id: editingNodeId }),
+          ...form,
+          address: addr
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -56,12 +62,20 @@ export default function NodesPage() {
         return;
       }
       setShowModal(false);
+      setEditingNodeId(null);
       setForm({ name: '', address: '', admin_token: '' });
-      showToast('节点添加成功！');
+      showToast(isEditing ? '节点更新成功！' : '节点添加成功！');
       fetchNodes();
     } catch (e) {
       setError(e.message);
     }
+  };
+
+  const handleEditClick = (node) => {
+    setForm({ name: node.name, address: node.address.replace(/^http:\/\//, ''), admin_token: '' });
+    setEditingNodeId(node.id);
+    setError('');
+    setShowModal(true);
   };
 
   const deleteNode = async (id, name) => {
@@ -136,9 +150,14 @@ export default function NodesPage() {
                     </td>
                     <td>{node.status?.total_users || 0}</td>
                     <td>
-                      <button className="btn btn-danger btn-sm" onClick={() => deleteNode(node.id, node.name)}>
-                        移除
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => handleEditClick(node)}>
+                          编辑
+                        </button>
+                        <button className="btn btn-danger btn-sm" onClick={() => deleteNode(node.id, node.name)}>
+                          移除
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -148,9 +167,9 @@ export default function NodesPage() {
         )}
 
         {showModal && (
-          <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal-overlay" onClick={() => { setShowModal(false); setEditingNodeId(null); }}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <h3>添加新节点</h3>
+              <h3>{editingNodeId ? '编辑节点' : '添加新节点'}</h3>
               {error && <div style={{ color: 'var(--danger)', fontSize: '14px', marginBottom: '16px' }}>{error}</div>}
               <div className="form-group">
                 <label>给节点起个易记的名称</label>
@@ -168,8 +187,8 @@ export default function NodesPage() {
                   onChange={(e) => setForm({ ...form, admin_token: e.target.value })} />
               </div>
               <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowModal(false)}>取消</button>
-                <button className="btn btn-primary" onClick={addNode}>检查并连接</button>
+                <button className="btn btn-secondary" onClick={() => { setShowModal(false); setEditingNodeId(null); }}>取消</button>
+                <button className="btn btn-primary" onClick={addNode}>{editingNodeId ? '保存并测试' : '检查并连接'}</button>
               </div>
             </div>
           </div>

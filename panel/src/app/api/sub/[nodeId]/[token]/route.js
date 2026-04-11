@@ -37,13 +37,15 @@ export async function GET(request, { params }) {
     const status = await nodeApi(node.address, node.admin_token, '/api/v1/status');
     const nodeDetails = await nodeApi(node.address, node.admin_token, '/api/v1/node');
 
+    const serverHost = new URL(node.address).hostname;
+
     // 4. Generate YAML
     let proxies = [];
 
     if (status.vless?.installed && status.vless?.running) {
       proxies.push(`  - name: "${node.name}-TCP"
     type: vless
-    server: ${nodeDetails.server_ip}
+    server: ${serverHost}
     port: ${status.vless.port}
     uuid: ${user.uuid}
     udp: true
@@ -60,7 +62,7 @@ export async function GET(request, { params }) {
     if (status.hysteria2?.installed && status.hysteria2?.running) {
       proxies.push(`  - name: "${node.name}-UDP"
     type: hysteria2
-    server: ${nodeDetails.server_ip}
+    server: ${serverHost}
     port: ${status.hysteria2.port}
     password: ${user.hy2_password}
     up: 50 Mbps

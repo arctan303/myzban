@@ -60,5 +60,29 @@ export async function DELETE(request) {
 
   const db = getDb();
   db.prepare('DELETE FROM nodes WHERE id = ?').run(id);
-  return Response.json({ status: 'deleted' });
+
+  return Response.json({ success: true });
+}
+
+export async function PUT(request) {
+  const admin = requireAdmin(request);
+  if (!admin) return Response.json({ error: 'Admin access required' }, { status: 403 });
+
+  const { id, name, address, admin_token } = await request.json();
+
+  if (!id || !name || !address || !admin_token) {
+    return Response.json({ error: 'id, name, address, admin_token required' }, { status: 400 });
+  }
+
+  // Verify connection (try new config)
+  try {
+    await nodeApi(address, admin_token, '/api/v1/status');
+  } catch (e) {
+    return Response.json({ error: `Cannot connect to node with updated config: ${e.message}` }, { status: 400 });
+  }
+
+  const db = getDb();
+  db.prepare('UPDATE nodes SET name = ?, address = ?, admin_token = ? WHERE id = ?').run(name, address, admin_token, id);
+
+  return Response.json({ id, name, address }, { status: 200 });
 }
