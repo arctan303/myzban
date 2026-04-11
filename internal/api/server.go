@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/pnm/proxy-node-manager/internal/config"
 	"github.com/pnm/proxy-node-manager/internal/db"
@@ -14,451 +15,121 @@ import (
 	"github.com/pnm/proxy-node-manager/internal/user"
 )
 
-// Server holds all dependencies for the HTTP API
 type Server struct {
-	cfg           *config.Config
-	db            *db.DB
-	userService   *user.Service
-	xray          *proxy.XrayManager
-	hy2           *proxy.Hy2Manager
-	xrayInstaller installer.Installer
-	hy2Installer  installer.Installer
+	cfg          *config.Config
+	db           *db.DB
+	userSvc      *user.Service
+	xray         *proxy.XrayManager
+	hy2          *proxy.Hy2Manager
+	xrayInstaller *installer.XrayInstaller
+	hy2Installer *installer.Hy2Installer
 }
 
-// NewServer creates a new API server
-func NewServer(
-	cfg *config.Config,
-	database *db.DB,
-	userSvc *user.Service,
-	xray *proxy.XrayManager,
-	hy2 *proxy.Hy2Manager,
-	xrayInst installer.Installer,
-	hy2Inst installer.Installer,
-) *Server {
+func NewServer(cfg *config.Config, db *db.DB, userSvc *user.Service, xray *proxy.XrayManager, hy2 *proxy.Hy2Manager, xi *installer.XrayInstaller, hi *installer.Hy2Installer) *Server {
 	return &Server{
-		cfg:           cfg,
-		db:            database,
-		userService:   userSvc,
-		xray:          xray,
-		hy2:           hy2,
-		xrayInstaller: xrayInst,
-		hy2Installer:  hy2Inst,
+		cfg:          cfg,
+		db:           db,
+		userSvc:      userSvc,
+		xray:         xray,
+		hy2:          hy2,
+		xrayInstaller: xi,
+		hy2Installer: hi,
 	}
 }
 
-// Start starts the main HTTP API server (blocking)
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
-
-	// Health check
-	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("pong"))
-	})
-
-	// --- Admin endpoints (require admin token) ---
-	mux.HandleFunc("/api/v1/status", s.adminAuth(s.handleStatus))
-	mux.HandleFunc("/api/v1/proxy/install", s.adminAuth(s.handleProxyInstall))
-	mux.HandleFunc("/api/v1/proxy/start", s.adminAuth(s.handleProxyStart))
-	mux.HandleFunc("/api/v1/proxy/stop", s.adminAuth(s.handleProxyStop))
-	mux.HandleFunc("/api/v1/users", s.adminAuth(s.handleUsers))
-	mux.HandleFunc("/api/v1/users/", s.adminAuth(s.handleUserByPath))
-	mux.HandleFunc("/api/v1/node", s.adminAuth(s.handleNodeInfo))
-
-	log.Printf("[api] listening on %s", s.cfg.APIListenAddr)
-	return http.ListenAndServe(s.cfg.APIListenAddr, withCORS(mux))
+	mux.HandleFunc("/api/v1/status", s.handleStatus)
+	mux.HandleFunc("/api/v1/proxy/install", s.handleProxyInstall)
+	mux.HandleFunc("/api/v1/proxy/start", s.handleProxyStart)
+	mux.HandleFunc("/api/v1/proxy/stop", s.handleProxyStop)
+	mux.HandleFunc("/api/v1/users", s.handleUsers)
+	mux.HandleFunc("/hy2/auth", s.handleHy2Auth)
+	addr := ":9090"
+	log.Printf("[INFO] API server starting on %s", addr)
+	return http.ListenAndServe(addr, mux)
 }
 
-// StartAuthEndpoint starts the Hysteria2 HTTP auth endpoint (blocking, internal only)
 func (s *Server) StartAuthEndpoint() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hy2/auth", s.handleHy2Auth)
-
-	log.Printf("[auth] hy2 auth endpoint on %s", s.cfg.AuthListenAddr)
-	return http.ListenAndServe(s.cfg.AuthListenAddr, mux)
+	addr := ":19876"
+	log.Printf("[INFO] Auth endpoint starting on %s", addr)
+	return http.ListenAndServe(addr, mux)
 }
-
-// --- Middleware ---
-
-// adminAuth wraps a handler with admin token authentication
-func (s *Server) adminAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		nodeInfo, err := s.db.GetNodeInfo()
-		if err != nil || nodeInfo.AdminToken == "" {
-			// No admin token set — reject all requests
-			jsonError(w, http.StatusUnauthorized, "admin token not configured, run: pnm token init")
-			return
-		}
-
-		// Accept token from Authorization header
-		token := r.Header.Get("Authorization")
-		token = strings.TrimPrefix(token, "Bearer ")
-
-		if token != nodeInfo.AdminToken {
-			jsonError(w, http.StatusUnauthorized, "invalid admin token")
-			return
-		}
-
-		next(w, r)
-	}
-}
-
-// withCORS adds CORS headers for panel access
-func withCORS(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Strict CORS: Only allow explicit origins in production. 
-		// For now, allow known panel origins or fallback to strictest.
-		origin := r.Header.Get("Origin")
-		if origin == "http://localhost:3000" || origin == "http://127.0.0.1:3000" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		h.ServeHTTP(w, r)
-	})
-}
-
-
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	users, _ := s.db.ListUsers()
-	enabledCount := 0
-	var totalUp, totalDown int64
-	for _, u := range users {
-		if u.Enabled {
-			enabledCount++
-		}
-		totalUp += u.TrafficUp
-		totalDown += u.TrafficDown
-	}
-
-	vlessConf, _ := s.db.GetProxyConfig("vless")
-	hy2Conf, _ := s.db.GetProxyConfig("hysteria2")
-	nodeInfo, _ := s.db.GetNodeInfo()
-
 	status := map[string]interface{}{
-		"server_ip":     nodeInfo.ServerIP,
-		"total_users":   len(users),
-		"enabled_users": enabledCount,
-		"total_upload":  totalUp,
-		"total_download": totalDown,
-		"vless": map[string]interface{}{
-			"installed": vlessConf != nil && vlessConf.Installed,
-			"running":   s.xray.IsRunning(),
-			"port":      s.cfg.VLESSPort,
-		},
-		"hysteria2": map[string]interface{}{
-			"installed": hy2Conf != nil && hy2Conf.Installed,
-			"running":   s.hy2.IsRunning(),
-			"port":      s.cfg.Hy2Port,
-		},
+		"version": "1.0.0",
+		"time":    time.Now().Format(time.RFC3339),
 	}
-
 	jsonResp(w, http.StatusOK, status)
 }
 
-func (s *Server) handleNodeInfo(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	nodeInfo, err := s.db.GetNodeInfo()
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	// Return safe node info and dest_domain
-	resp := struct {
-		*db.NodeInfo
-		DestDomain string `json:"dest_domain"`
-	}{
-		NodeInfo:   nodeInfo,
-		DestDomain: s.cfg.DestDomain,
-	}
-	jsonResp(w, http.StatusOK, resp)
-}
-
 func (s *Server) handleProxyInstall(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Protocol string `json:"protocol"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, "invalid request body")
-		rlog.Printf("[ERROR] Xray install failed: %v", err)
-			jsonError(w, http.StatusInternalServerError, "failed to install Xray")
-			return
-		}
-	case "hysteria2":
-		if err := s.hy2Installer.Install(); err != nil {
-			log.Printf("[ERROR] Hysteria2 install failed: %v", err)
-			jsonError(w, http.StatusInternalServerError, "failed to install Hysteria2"
-			jsonError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-	case "hysteria2":
-		if err := s.hy2Installer.Install(); err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-	default:
-		jsonError(w, http.StatusBadRequest, "unknown protocol: "+req.Protocol)
-		return
-	}
-
-	jsonResp(w, http.StatusOK, map[string]string{"status": "installed", "protocol": req.Protocol})
+	var req struct { Protocol string  }
+	json.NewDecoder(r.Body).Decode(&req)
+	var err error
+	if req.Protocol == "vless" { err = s.xrayInstaller.Install() } else { err = s.hy2Installer.Install() }
+	if err != nil { jsonError(w, 500, err.Error()); return }
+	jsonResp(w, 200, map[string]string{"status": "installed"})
 }
 
 func (s *Server) handleProxyStart(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Protocol string `json:"protocol"`
-	}
+	var req struct { Protocol string  }
 	json.NewDecoder(r.Body).Decode(&req)
-
 	var err error
-	switch req.Protocol {
-	case "vless":
-		users, _ := s.db.ListEnabledUsers()
-		s.xray.GenerateConfig(users)
-		err = s.xray.Start()
-	case "hysteria2":
-		users, _ := s.db.ListEnabledUsers()
-		s.hy2.GenerateConfig(users)
-		err = s.hy2.Start()
-	default:
-		jsonError(w, http.StatusBadRequest, "unknown protocol")
-		return
+	if req.Protocol == "vless" { 
+		u, _ := s.db.ListEnabledUsers()
+		s.xray.GenerateConfig(u)
+		err = s.xray.Start() 
+	} else { 
+		u, _ := s.db.ListEnabledUsers()
+		s.hy2.GenerateConfig(u)
+		err = s.hy2.Start() 
 	}
-
-	if err != nil {
-		log.Printf("[ERROR] Proxy start failed [%s]: %v", req.Protocol, err)
-		jsonError(w, http.StatusInternalServerError, "failed to start proxy service")
-		return
-	}
-	jsonResp(w, http.StatusOK, map[string]string{"status": "started"})
+	if err != nil { jsonError(w, 500, err.Error()); return }
+	jsonResp(w, 200, map[string]string{"status": "started"})
 }
 
 func (s *Server) handleProxyStop(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Protocol string `json:"protocol"`
-	}
+	var req struct { Protocol string  }
 	json.NewDecoder(r.Body).Decode(&req)
-
 	var err error
-	switch req.Protocol {
-	case "vless":
-		err = s.xray.Stop()
-	clog.Printf("[ERROR] Proxy stop failed [%s]: %v", req.Protocol, err)
-		jsonError(w, http.StatusInternalServerError, "failed to stop proxy service"
-		err = s.hy2.Stop()
-	default:
-		jsonError(w, http.StatusBadRequest, "unknown protocol")
-		return
-	}
-
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	jsonResp(w, http.StatusOK, map[string]string{"status": "stopped"})
+	if req.Protocol == "vless" { err = s.xray.Stop() } else { err = s.hy2.Stop() }
+	if err != nil { jsonError(w, 500, err.Error()); return }
+	jsonResp(w, 200, map[string]string{"status": "stopped"})
 }
 
 func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		users, err := s.userService.ListUsers()
-		if err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		jsonResp(w, http.StatusOK, users)
-
-	case http.MethodPost:
-		var req struct {
-			Username string `json:"username"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, http.StatusBadRequest, "invalid body")
-			return
-		}
-		u, err := s.userService.CreateUser(req.Username)
-		if err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		jsonResp(w, http.StatusCreated, u)
-
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
+	users, _ := s.db.ListUsers()
+	jsonResp(w, 200, users)
 }
 
-func (s *Server) handleUserByPath(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-	prefix := "/api/v1/users/"
-	if len(path) <= len(prefix) {
-		jsonError(w, http.StatusBadRequest, "username required")
-		return
-	}
-
-	remaining := path[len(prefix):]
-	parts := splitPath(remaining)
-	username := parts[0]
-	action := ""
-	if len(parts) > 1 {
-		action = parts[1]
-	}
-
-	switch {
-	case action == "" && r.Method == http.MethodGet:
-		u, err := s.userService.GetUser(username)
-		if err != nil {
-			jsonError(w, http.StatusNotFound, err.Error())
-			return
-		}
-		jsonResp(w, http.StatusOK, u)
-
-	case action == "" && r.Method == http.MethodDelete:
-		if err := s.userService.DeleteUser(username); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		jsonResp(w, http.StatusOK, map[string]string{"status": "deleted"})
-
-	case action == "enable" && r.Method == http.MethodPost:
-		if err := s.userService.EnableUser(username); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		jsonResp(w, http.StatusOK, map[string]string{"status": "enabled"})
-
-	case action == "disable" && r.Method == http.MethodPost:
-		if err := s.userService.DisableUser(username); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		jsonResp(w, http.StatusOK, map[string]string{"status": "disabled"})
-
-	case action == "traffic" && r.Method == http.MethodGet:
-		logs, err := s.userService.GetTrafficLogs(username, 100)
-		if err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		jsonResp(w, http.StatusOK, logs)
-
-	case action == "reset-traffic" && r.Method == http.MethodPost:
-		if err := s.userService.ResetTraffic(username); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		jsonResp(w, http.StatusOK, map[string]string{"status": "traffic_reset"})
-
-	default:
-		http.Error(w, "not found", http.StatusNotFound)
-	}
-}
-
-// handleHy2Auth handles Hysteria2 HTTP auth requests
 func (s *Server) handleHy2Auth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Addr string `json:"addr"`
-		Auth string `json:"auth"`
-		Tx   int64  `json:"tx"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false})
-		return
-	}
-
-	u, err := s.db.FindEnabledUserByHy2Auth(req.Auth)
-	if err != nil || u == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false})
-		return
-	}
-
-	if u.TrafficLimit > 0 && (u.TrafficUp+u.TrafficDown) >= u.TrafficLimit {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false})
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok": true,
-		"id": u.Username,
-	})
+	var req struct { User, Password string }
+	json.NewDecoder(r.Body).Decode(&req)
+	u, _ := s.db.GetUserByUsername(req.User)
+	if u != nil && u.Enabled && u.Hy2Password == req.Password { w.WriteHeader(200) } else { w.WriteHeader(403) }
 }
 
-// --- Helpers ---
+func FormatBytes(b int64) string {
+	const unit = 1024
+	if b < unit { return fmt.Sprintf("%d B", b) }
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.2f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
 
-func jsonResp(w http.ResponseWriter, status int, data interface{}) {
+func jsonResp(w http.ResponseWriter, code int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(data)
 }
 
-func jsonError(w http.ResponseWriter, status int, msg string) {
-	jsonResp(w, status, map[string]string{"error": msg})
-}
-
-func splitPath(path string) []string {
-	var parts []string
-	for _, p := range strings.Split(path, "/") {
-		if p != "" {
-			parts = append(parts, p)
-		}
-	}
-	return parts
-}
-
-// FormatBytes formats bytes into human-readable form
-func FormatBytes(b int64) string {
-	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
-	)
-	switch {
-	case b >= GB:
-		return fmt.Sprintf("%.2f GB", float64(b)/float64(GB))
-	case b >= MB:
-		return fmt.Sprintf("%.2f MB", float64(b)/float64(MB))
-	case b >= KB:
-		return fmt.Sprintf("%.2f KB", float64(b)/float64(KB))
-	default:
-		return fmt.Sprintf("%d B", b)
-	}
+func jsonError(w http.ResponseWriter, code int, msg string) {
+	jsonResp(w, code, map[string]string{"error": msg})
 }

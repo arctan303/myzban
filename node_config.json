@@ -2,7 +2,7 @@
   "db_path": "/etc/pnm/pnm.db",
   "api_listen_addr": "0.0.0.0:9090",
   "auth_listen_addr": "127.0.0.1:19876",
-  "vless_port": 443,
+  "vless_port": 8443,
   "hy2_port": 8443,
   "collect_interval": 30,
   "xray_bin_path": "/usr/local/bin/xray",

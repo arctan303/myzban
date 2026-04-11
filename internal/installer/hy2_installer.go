@@ -12,7 +12,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/pnm/proxy-node-manager/internal/config"
