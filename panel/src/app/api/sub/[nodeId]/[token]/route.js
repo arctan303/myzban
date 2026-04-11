@@ -49,7 +49,7 @@ export async function GET(request, { params }) {
     udp: true
     tls: true
     network: tcp
-    servername: bing.com
+    servername: www.cloudflare.com
     client-fingerprint: chrome
     reality-opts:
       public-key: ${nodeDetails.xray_pub_key}
@@ -64,7 +64,7 @@ export async function GET(request, { params }) {
     password: ${user.hy2_password}
     up: 50 Mbps
     down: 100 Mbps
-    sni: bing.com
+    sni: www.cloudflare.com
     skip-cert-verify: true
     alpn:
       - h3`);
