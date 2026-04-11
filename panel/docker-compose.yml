@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   panel:
-    build: .
+    build:
+      context: .
+      network: host
     container_name: pnm-panel
     restart: unless-stopped
     network_mode: host
