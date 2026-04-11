@@ -1,0 +1,18 @@
+{
+  "db_path": "/etc/pnm/pnm.db",
+  "api_listen_addr": "0.0.0.0:9090",
+  "auth_listen_addr": "127.0.0.1:19876",
+  "vless_port": 443,
+  "hy2_port": 8443,
+  "collect_interval": 30,
+  "xray_bin_path": "/usr/local/bin/xray",
+  "xray_config_path": "/usr/local/etc/xray/config.json",
+  "xray_api_addr": "127.0.0.1:10085",
+  "hy2_bin_path": "/usr/local/bin/hysteria",
+  "hy2_config_path": "/etc/hysteria/config.yaml",
+  "hy2_stats_addr": "127.0.0.1:25413",
+  "hy2_stats_secret": "a795b6c50236438cef30f14e2bf77a32",
+  "hy2_cert_path": "/etc/hysteria/server.crt",
+  "hy2_key_path": "/etc/hysteria/server.key",
+  "dest_domain": "www.cloudflare.com"
+}

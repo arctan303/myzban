@@ -1,5 +1,6 @@
 // GET  /api/panel-users — list panel accounts (admin only)
 // POST /api/panel-users — create panel account (admin only)
+// PUT  /api/panel-users — update panel account username/password (admin only)
 // DELETE /api/panel-users?id=X — delete panel account (admin only)
 import { getDb } from '../../../lib/db';
 import { requireAdmin } from '../../../lib/auth';
@@ -51,6 +52,37 @@ export async function POST(request) {
     role: finalRole,
     proxy_username: proxy_username || null,
   }, { status: 201 });
+}
+
+export async function PUT(request) {
+  const admin = requireAdmin(request);
+  if (!admin) {
+    return Response.json({ error: 'Admin access required' }, { status: 403 });
+  }
+
+  const { id, username, new_password } = await request.json();
+
+  if (!id || !username) {
+    return Response.json({ error: 'id and username required' }, { status: 400 });
+  }
+
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM panel_users WHERE username = ? AND id != ?').get(username, id);
+  if (existing) {
+    return Response.json({ error: `用户名 "${username}" 已被其他账号使用` }, { status: 409 });
+  }
+
+  if (new_password) {
+    if (new_password.length < 4) {
+      return Response.json({ error: '密码长度至少 4 位' }, { status: 400 });
+    }
+    const hash = bcrypt.hashSync(new_password, 10);
+    db.prepare('UPDATE panel_users SET username = ?, password_hash = ? WHERE id = ?').run(username, hash, id);
+  } else {
+    db.prepare('UPDATE panel_users SET username = ? WHERE id = ?').run(username, id);
+  }
+
+  return Response.json({ status: 'updated' });
 }
 
 export async function DELETE(request) {
