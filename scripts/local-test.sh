@@ -18,6 +18,13 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+echo -e "${GREEN}[0/5] Uninstalling Previous Setup...${NC}"
+systemctl stop pnm pnm-panel xray hysteria-server 2>/dev/null || true
+systemctl disable pnm pnm-panel xray hysteria-server 2>/dev/null || true
+rm -rf /usr/local/bin/pnm /etc/pnm /var/log/pnm ~/.pnm-panel
+docker-compose -f "$DIR/panel/docker-compose.yml" down 2>/dev/null || true
+docker rm -f pnm-panel 2>/dev/null || true
+
 echo -e "${GREEN}[1/5] Installing Dependencies...${NC}"
 apt update -y && apt install -y curl wget sudo git golang-go sqlite3 jq
 
