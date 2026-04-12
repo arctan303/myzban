@@ -98,7 +98,7 @@ chmod 777 "$(dirname "$PANEL_DB")"
 chmod 666 "$PANEL_DB"
 
 # Create a default panel admin user if needed
-docker exec pnm-panel sqlite3 /data/panel.db "CREATE TABLE IF NOT EXISTS panel_users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, role TEXT, proxy_username TEXT, sub_token TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+sqlite3 "$PANEL_DB" "CREATE TABLE IF NOT EXISTS panel_users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, role TEXT, proxy_username TEXT, sub_token TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
 # Password 'admin' -> bcrypt hash $2a$10$W/tG0G.gU.A/z6S8x.6WGu/T3gO.Yy.Y8x6.8OQ0X1X1X/Y0X1X1. (Wait, let's insert if admin doesn't exist or just let it be handled by panel initialization). Normally panel handles this.
 
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
