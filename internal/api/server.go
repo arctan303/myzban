@@ -172,7 +172,7 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var req struct { Username string `json:"username"` }
 		json.NewDecoder(r.Body).Decode(&req)
-		u, err := s.userService.CreateUser(req.Username)
+		u, err := s.userSvc.CreateUser(req.Username)
 		if err != nil { jsonError(w, 500, err.Error()); return }
 		jsonResp(w, 201, u)
 	}
@@ -184,14 +184,14 @@ func (s *Server) handleUserOps(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(username, "/")
 	uname := parts[0]
 	if r.Method == http.MethodDelete {
-		if err := s.userService.DeleteUser(uname); err != nil { jsonError(w, 500, err.Error()); return }
+		if err := s.userSvc.DeleteUser(uname); err != nil { jsonError(w, 500, err.Error()); return }
 		jsonResp(w, 200, map[string]string{"status": "deleted"})
 		return
 	}
 	if len(parts) > 1 && r.Method == http.MethodPost {
 		action := parts[1]
-		if action == "enable" { s.userService.EnableUser(uname) }
-		if action == "disable" { s.userService.DisableUser(uname) }
+		if action == "enable" { s.userSvc.EnableUser(uname) }
+		if action == "disable" { s.userSvc.DisableUser(uname) }
 		jsonResp(w, 200, map[string]string{"status": "ok"})
 	}
 }
