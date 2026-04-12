@@ -49,13 +49,18 @@ export async function GET(request, { params }) {
 
       let serverHost = new URL(node.address).hostname;
       let resolvedIp = serverHost;
-      try {
-        const result = await dns.lookup(serverHost);
-        if (result && result.address) {
-          resolvedIp = result.address;
+
+      if ((node.use_reported_ip === 1 || node.use_reported_ip === undefined) && node.last_detected_ip) {
+        resolvedIp = node.last_detected_ip;
+      } else {
+        try {
+          const result = await dns.lookup(serverHost);
+          if (result && result.address) {
+            resolvedIp = result.address;
+          }
+        } catch (e) {
+          console.error(`DNS lookup failed for ${serverHost}:`, e.message);
         }
-      } catch (e) {
-        console.error(`DNS lookup failed for ${serverHost}:`, e.message);
       }
 
       if (status.vless?.installed && status.vless?.running) {

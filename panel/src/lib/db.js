@@ -59,6 +59,17 @@ function getDb() {
     }
   } catch(e) { console.error('DB Migration error:', e); }
 
+  // Simple migrations for nodes table
+  try {
+    const nodeCols = db.prepare("PRAGMA table_info(nodes)").all();
+    if (!nodeCols.find(c => c.name === 'last_detected_ip')) {
+      db.exec("ALTER TABLE nodes ADD COLUMN last_detected_ip TEXT");
+    }
+    if (!nodeCols.find(c => c.name === 'use_reported_ip')) {
+      db.exec("ALTER TABLE nodes ADD COLUMN use_reported_ip INTEGER DEFAULT 1");
+    }
+  } catch(e) { console.error('Nodes DB Migration error:', e); }
+
   // Generate missing sub_tokens
   const usersWithoutTokens = db.prepare("SELECT id FROM panel_users WHERE sub_token IS NULL OR sub_token = ''").all();
   if (usersWithoutTokens.length > 0) {

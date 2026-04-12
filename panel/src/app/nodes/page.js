@@ -8,7 +8,7 @@ export default function NodesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState(null);
-  const [form, setForm] = useState({ name: '', address: '', admin_token: '' });
+  const [form, setForm] = useState({ name: '', address: '', admin_token: '', use_reported_ip: true });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
@@ -65,7 +65,7 @@ export default function NodesPage() {
       }
       setShowModal(false);
       setEditingNodeId(null);
-      setForm({ name: '', address: '', admin_token: '' });
+      setForm({ name: '', address: '', admin_token: '', use_reported_ip: true });
       showToast(isEditing ? '节点更新成功！' : '节点添加成功！');
       fetchNodes();
     } catch (e) {
@@ -76,14 +76,19 @@ export default function NodesPage() {
   };
 
   const handleAddClick = () => {
-    setForm({ name: '', address: '', admin_token: '' });
+    setForm({ name: '', address: '', admin_token: '', use_reported_ip: true });
     setEditingNodeId(null);
     setError('');
     setShowModal(true);
   };
 
   const handleEditClick = (node) => {
-    setForm({ name: node.name, address: node.address.replace(/^http:\/\//, ''), admin_token: '' });
+    setForm({ 
+      name: node.name, 
+      address: node.address.replace(/^http:\/\//, ''), 
+      admin_token: '',
+      use_reported_ip: node.use_reported_ip === 0 ? false : true 
+    });
     setEditingNodeId(node.id);
     setError('');
     setShowModal(true);
@@ -197,7 +202,17 @@ export default function NodesPage() {
                 <input className="form-input" placeholder="在远端运行 pnm token show 获取" value={form.admin_token}
                   onChange={(e) => setForm({ ...form, admin_token: e.target.value })} />
               </div>
-              <div className="modal-actions">
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '15px' }}>
+                <input 
+                  type="checkbox" 
+                  id="reportedIpCheckbox"
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  checked={form.use_reported_ip}
+                  onChange={(e) => setForm({ ...form, use_reported_ip: e.target.checked })} 
+                />
+                <label htmlFor="reportedIpCheckbox" style={{ margin: 0, cursor: 'pointer', fontWeight: 500, fontSize: '14px' }}>使用节点上报的公网 IP 生成配置</label>
+              </div>              
+              <div className="modal-actions" style={{ marginTop: '20px' }}>
                 <button className="btn btn-secondary" onClick={() => { setShowModal(false); setEditingNodeId(null); }} disabled={isSaving}>取消</button>
                 <button className="btn btn-primary" onClick={addNode} disabled={isSaving}>
                   {isSaving ? '正在测试并保存...' : (editingNodeId ? '保存并测试' : '检查并连接')}
