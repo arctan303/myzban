@@ -88,10 +88,14 @@ PANEL_DB="$DIR/panel/data/panel.db"
 mkdir -p "$DIR/panel/data"
 
 echo "Creating initial panel node entry..."
-docker exec pnm-panel sqlite3 /data/panel.db "CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY, name TEXT, address TEXT, admin_token TEXT);"
+sqlite3 "$PANEL_DB" "CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY, name TEXT, address TEXT, admin_token TEXT);"
 # Delete and replace
-docker exec pnm-panel sqlite3 /data/panel.db "DELETE FROM nodes WHERE address = 'http://127.0.0.1:9090';"
-docker exec pnm-panel sqlite3 /data/panel.db "INSERT INTO nodes (name, address, admin_token) VALUES ('LocalNode', 'http://127.0.0.1:9090', '${ADMIN_TOKEN}');"
+sqlite3 "$PANEL_DB" "DELETE FROM nodes WHERE address = 'http://127.0.0.1:9090';"
+sqlite3 "$PANEL_DB" "INSERT INTO nodes (name, address, admin_token) VALUES ('Local Test Node', 'http://127.0.0.1:9090', '$PNM_TOKEN');"
+
+echo "Applying permissions for Next.js app to access the database..."
+chmod 777 "$(dirname "$PANEL_DB")"
+chmod 666 "$PANEL_DB"
 
 # Create a default panel admin user if needed
 docker exec pnm-panel sqlite3 /data/panel.db "CREATE TABLE IF NOT EXISTS panel_users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, role TEXT, proxy_username TEXT, sub_token TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
