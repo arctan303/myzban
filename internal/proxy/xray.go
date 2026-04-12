@@ -283,7 +283,7 @@ func (x *XrayManager) RemoveUser(user *db.User) error {
 
 // GetTrafficStats queries Xray stats API via `xray api statsquery`
 func (x *XrayManager) GetTrafficStats(reset bool) (map[string]*TrafficData, error) {
-	args := []string{"api", "statsquery", "--server=" + x.cfg.XrayAPIAddr}
+	args := []string{"api", "statsquery", "--server=" + x.cfg.XrayAPIAddr, "-pattern="}
 	if reset {
 		args = append(args, "-reset=true")
 	}

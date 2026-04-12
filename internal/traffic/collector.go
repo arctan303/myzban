@@ -80,8 +80,14 @@ func (c *Collector) collect() {
 		c.collectHy2(hy2Map)
 	}
 
-	// Check for over-limit users
-	c.checkLimits(users)
+	// Refresh users so we have up-to-date traffic values
+	updatedUsers, err := c.db.ListUsers()
+	if err == nil {
+		// Check for over-limit users
+		c.checkLimits(updatedUsers)
+	} else {
+		log.Printf("[traffic] list users error on second pass: %v", err)
+	}
 }
 
 func (c *Collector) collectXray(emailMap map[string]*db.User) {
@@ -145,11 +151,13 @@ func (c *Collector) collectHy2(hy2Map map[string]*db.User) {
 }
 
 func (c *Collector) checkLimits(users []*db.User) {
+	changed := false
 	for _, u := range users {
 		if !u.Enabled {
 			continue
 		}
 
+		disabled := false
 		// Check traffic limit
 		if u.TrafficLimit > 0 {
 			total := u.TrafficUp + u.TrafficDown
@@ -157,26 +165,30 @@ func (c *Collector) checkLimits(users []*db.User) {
 				log.Printf("[traffic] user %s exceeded traffic limit (%s >= %s), disabling",
 					u.Username, formatBytes(total), formatBytes(u.TrafficLimit))
 				c.db.SetUserEnabled(u.ID, false)
-				// Remove from proxies
-				if c.xray != nil {
-					c.xray.RemoveUser(u)
-				}
-				if c.hy2 != nil {
-					c.hy2.RemoveUser(u)
-				}
+				disabled = true
+				changed = true
 			}
 		}
 
 		// Check expiration
-		if u.ExpiresAt != nil && time.Now().After(*u.ExpiresAt) {
+		if !disabled && u.ExpiresAt != nil && time.Now().After(*u.ExpiresAt) {
 			log.Printf("[traffic] user %s expired, disabling", u.Username)
 			c.db.SetUserEnabled(u.ID, false)
-			if c.xray != nil {
-				c.xray.RemoveUser(u)
-			}
+			disabled = true
+			changed = true
+		}
+		
+		if disabled {
+			// hy2 disconnects user
 			if c.hy2 != nil {
 				c.hy2.RemoveUser(u)
 			}
+		}
+	}
+
+	if changed && c.xray != nil {
+		if err := c.xray.AddUser(nil); err != nil {
+			log.Printf("[traffic] error reloading xray config after disabling user: %v", err)
 		}
 	}
 }
