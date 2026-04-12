@@ -30,8 +30,10 @@ if ! command -v docker-compose &> /dev/null; then
     apt install -y docker-compose
 fi
 
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/.."
+
 echo -e "${GREEN}[2/5] Building Node (PNM)...${NC}"
-cd /root/myzban
+cd "$DIR"
 export CGO_ENABLED=1
 go build -o /usr/local/bin/pnm ./cmd/pnm/
 chmod +x /usr/local/bin/pnm
@@ -70,7 +72,7 @@ fi
 echo -e "${GREEN}Node Admin Token: ${ADMIN_TOKEN}${NC}"
 
 echo -e "${GREEN}[4/5] Building and Starting Panel...${NC}"
-cd /root/myzban/panel
+cd "$DIR/panel"
 
 # Rebuild docker container
 docker-compose down 2>/dev/null || true
@@ -81,9 +83,9 @@ echo -e "${GREEN}[5/5] Connecting Panel to Node...${NC}"
 sleep 5 # Wait for panel to start
 
 # We inject the node into the Panel's database directly
-PANEL_DB="/root/myzban/panel/data/panel.db"
+PANEL_DB="$DIR/panel/data/panel.db"
 # Wait until the db file is created by the panel or create it if absent
-mkdir -p /root/myzban/panel/data
+mkdir -p "$DIR/panel/data"
 
 echo "Creating initial panel node entry..."
 docker exec pnm-panel sqlite3 /data/panel.db "CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY, name TEXT, address TEXT, admin_token TEXT);"
