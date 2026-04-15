@@ -50,7 +50,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/hy2/auth", s.handleHy2Auth)
 
 	addr := s.cfg.APIListenAddr
-	if addr == ":" { addr = ":9090" }
+	if addr == ":" {
+		addr = ":9090"
+	}
 	log.Printf("[INFO] API server starting on %s", addr)
 	return http.ListenAndServe(addr, withCORS(mux))
 }
@@ -95,7 +97,9 @@ func withCORS(h http.Handler) http.Handler {
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	nodeInfo, _ := s.db.GetNodeInfo()
 	publicIP := ""
-	if nodeInfo != nil { publicIP = nodeInfo.ServerIP }
+	if nodeInfo != nil {
+		publicIP = nodeInfo.ServerIP
+	}
 	if publicIP == "" {
 		resp, err := http.Get("https://api.ipify.org")
 		if err == nil {
@@ -109,8 +113,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	hy2Conf, _ := s.db.GetProxyConfig("hysteria2")
 
 	status := map[string]interface{}{
-		"version": "1.0.0",
-		"time":    time.Now().Format(time.RFC3339),
+		"version":   "1.0.0",
+		"time":      time.Now().Format(time.RFC3339),
 		"server_ip": publicIP,
 		"vless": map[string]interface{}{
 			"installed": vlessConf != nil && vlessConf.Installed,
@@ -128,39 +132,69 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleNodeInfo(w http.ResponseWriter, r *http.Request) {
 	nodeInfo, err := s.db.GetNodeInfo()
-	if err != nil { jsonError(w, 500, err.Error()); return }
+	if err != nil {
+		jsonError(w, 500, err.Error())
+		return
+	}
 	jsonResp(w, http.StatusOK, map[string]interface{}{
-		"server_ip": nodeInfo.ServerIP,
+		"server_ip":    nodeInfo.ServerIP,
 		"xray_pub_key": nodeInfo.XrayPubKey,
-		"short_id": nodeInfo.ShortID,
-		"dest_domain": s.cfg.DestDomain,
+		"short_id":     nodeInfo.ShortID,
+		"dest_domain":  s.cfg.DestDomain,
 	})
 }
 
 func (s *Server) handleProxyInstall(w http.ResponseWriter, r *http.Request) {
-	var req struct { Protocol string `json:"protocol"` }
+	var req struct {
+		Protocol string `json:"protocol"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 	var err error
-	if req.Protocol == "vless" { err = s.xrayInstaller.Install() } else { err = s.hy2Installer.Install() }
-	if err != nil { jsonError(w, 500, err.Error()); return }
+	if req.Protocol == "vless" {
+		err = s.xrayInstaller.Install()
+	} else {
+		err = s.hy2Installer.Install()
+	}
+	if err != nil {
+		jsonError(w, 500, err.Error())
+		return
+	}
 	jsonResp(w, 200, map[string]string{"status": "installed"})
 }
 
 func (s *Server) handleProxyStart(w http.ResponseWriter, r *http.Request) {
-	var req struct { Protocol string `json:"protocol"` }
+	var req struct {
+		Protocol string `json:"protocol"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 	var err error
-	if req.Protocol == "vless" { err = s.xray.Start() } else { err = s.hy2.Restart() }
-	if err != nil { jsonError(w, 500, err.Error()); return }
+	if req.Protocol == "vless" {
+		err = s.xray.Start()
+	} else {
+		err = s.hy2.Restart()
+	}
+	if err != nil {
+		jsonError(w, 500, err.Error())
+		return
+	}
 	jsonResp(w, 200, map[string]string{"status": "started"})
 }
 
 func (s *Server) handleProxyStop(w http.ResponseWriter, r *http.Request) {
-	var req struct { Protocol string `json:"protocol"` }
+	var req struct {
+		Protocol string `json:"protocol"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 	var err error
-	if req.Protocol == "vless" { err = s.xray.Stop() } else { err = s.hy2.Stop() }
-	if err != nil { jsonError(w, 500, err.Error()); return }
+	if req.Protocol == "vless" {
+		err = s.xray.Stop()
+	} else {
+		err = s.hy2.Stop()
+	}
+	if err != nil {
+		jsonError(w, 500, err.Error())
+		return
+	}
 	jsonResp(w, 200, map[string]string{"status": "stopped"})
 }
 
@@ -170,53 +204,67 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		users, _ := s.db.ListUsers()
 		jsonResp(w, 200, users)
 	case http.MethodPost:
-		var req struct { Username string `json:"username"` }
+		var req struct {
+			Username string `json:"username"`
+		}
 		json.NewDecoder(r.Body).Decode(&req)
 		u, err := s.userSvc.CreateUser(req.Username)
-		if err != nil { jsonError(w, 500, err.Error()); return }
+		if err != nil {
+			jsonError(w, 500, err.Error())
+			return
+		}
 		jsonResp(w, 201, u)
 	}
 }
 
 func (s *Server) handleUserOps(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimPrefix(r.URL.Path, "/api/v1/users/")
-	if username == "" { return }
+	if username == "" {
+		return
+	}
 	parts := strings.Split(username, "/")
 	uname := parts[0]
 	if r.Method == http.MethodDelete {
-		if err := s.userSvc.DeleteUser(uname); err != nil { jsonError(w, 500, err.Error()); return }
+		if err := s.userSvc.DeleteUser(uname); err != nil {
+			jsonError(w, 500, err.Error())
+			return
+		}
 		jsonResp(w, 200, map[string]string{"status": "deleted"})
 		return
 	}
 	if len(parts) > 1 && r.Method == http.MethodPost {
 		action := parts[1]
-		if action == "enable" { s.userSvc.EnableUser(uname) }
-		if action == "disable" { s.userSvc.DisableUser(uname) }
+		if action == "enable" {
+			s.userSvc.EnableUser(uname)
+		}
+		if action == "disable" {
+			s.userSvc.DisableUser(uname)
+		}
 		jsonResp(w, 200, map[string]string{"status": "ok"})
 	}
 }
 
 func (s *Server) handleHy2Auth(w http.ResponseWriter, r *http.Request) {
-        var req struct {
-                Addr string `json:"addr"`
-                Auth string `json:"auth"`
-                Tx   uint64 `json:"tx"`
-                Rx   uint64 `json:"rx"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-                jsonResp(w, 400, map[string]interface{}{"ok": false})
-                return
-        }
+	var req struct {
+		Addr string `json:"addr"`
+		Auth string `json:"auth"`
+		Tx   uint64 `json:"tx"`
+		Rx   uint64 `json:"rx"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]interface{}{"ok": false})
+		return
+	}
 
-        u, _ := s.db.GetUserByHy2Password(req.Auth)
-        if u != nil && u.Enabled {
-                jsonResp(w, 200, map[string]interface{}{
-                        "ok": true,
-                        "id": u.Username,
-                })
-        } else {
-                jsonResp(w, 200, map[string]interface{}{"ok": false})
-        }
+	u, _ := s.db.GetUserByHy2Password(req.Auth)
+	if u != nil && u.Enabled {
+		jsonResp(w, 200, map[string]interface{}{
+			"ok": true,
+			"id": u.Username,
+		})
+	} else {
+		jsonResp(w, 200, map[string]interface{}{"ok": false})
+	}
 }
 
 func FormatBytes(b int64) string { return fmt.Sprintf("%d B", b) }
