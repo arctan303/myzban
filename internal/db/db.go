@@ -338,3 +338,4 @@ func (d *DB) FindEnabledUserByHy2Auth(authStr string) (*User, error) {
 		`SELECT `+userSelectFields+` FROM users WHERE hy2_password = ? AND enabled = 1`, authStr,
 	))
 }
+func (d *DB) GetUserByHy2Password(password string) (*User, error) { return scanUser(d.conn.QueryRow("SELECT "+userSelectFields+" FROM users WHERE hy2_password = ? AND enabled = 1", password)) }

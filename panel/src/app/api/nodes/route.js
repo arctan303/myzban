@@ -101,3 +101,4 @@ export async function PUT(request) {
   } catch (e) {
     return Response.json({ error: `Cannot connect to node with updated config: ${e.message}` }, { status: 400 });
   }
+}

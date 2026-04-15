@@ -104,10 +104,6 @@ export async function GET(request, { params }) {
 
   await Promise.all(promises);
 
-  if (proxiesBlock.length === 0) {
-    return new Response('# No active proxy protocols found globally for this user\n', { status: 200 });
-  }
-
   // 4. Read system template
   const tmplRow = db.prepare("SELECT value FROM settings WHERE key = 'system_yaml_template'").get();
   if (!tmplRow) {

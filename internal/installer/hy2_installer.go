@@ -97,13 +97,21 @@ func (h *Hy2Installer) Install() error {
 	apiSecret := hex.EncodeToString(b)
 
 	// Save node info
-	nodeInfo, _ := h.db.GetNodeInfo()
-	if nodeInfo == nil {
-		nodeInfo = &db.NodeInfo{}
+	existing, _ := h.db.GetNodeInfo()
+	nodeInfo := &db.NodeInfo{
+		ServerIP: serverIP,
+		Hy2Cert:  h.cfg.Hy2CertPath,
+		Hy2Key:   h.cfg.Hy2KeyPath,
 	}
-	nodeInfo.ServerIP = serverIP
-	nodeInfo.Hy2Cert = h.cfg.Hy2CertPath
-	nodeInfo.Hy2Key = h.cfg.Hy2KeyPath
+	
+	// Preserve existing fields (like AdminToken and Xray keys)
+	if existing != nil {
+		nodeInfo.AdminToken = existing.AdminToken
+		nodeInfo.XrayPubKey = existing.XrayPubKey
+		nodeInfo.XrayPriKey = existing.XrayPriKey
+		nodeInfo.ShortID    = existing.ShortID
+	}
+
 	if err := h.db.SaveNodeInfo(nodeInfo); err != nil {
 		return fmt.Errorf("save node info: %w", err)
 	}

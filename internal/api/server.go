@@ -197,10 +197,26 @@ func (s *Server) handleUserOps(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHy2Auth(w http.ResponseWriter, r *http.Request) {
-	var req struct { User, Password string }
-	json.NewDecoder(r.Body).Decode(&req)
-	u, _ := s.db.GetUserByUsername(req.User)
-	if u != nil && u.Enabled && u.Hy2Password == req.Password { w.WriteHeader(200) } else { w.WriteHeader(403) }
+        var req struct {
+                Addr string `json:"addr"`
+                Auth string `json:"auth"`
+                Tx   uint64 `json:"tx"`
+                Rx   uint64 `json:"rx"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+                jsonResp(w, 400, map[string]interface{}{"ok": false})
+                return
+        }
+
+        u, _ := s.db.GetUserByHy2Password(req.Auth)
+        if u != nil && u.Enabled {
+                jsonResp(w, 200, map[string]interface{}{
+                        "ok": true,
+                        "id": u.Username,
+                })
+        } else {
+                jsonResp(w, 200, map[string]interface{}{"ok": false})
+        }
 }
 
 func FormatBytes(b int64) string { return fmt.Sprintf("%d B", b) }

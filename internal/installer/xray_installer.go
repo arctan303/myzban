@@ -78,18 +78,22 @@ func (x *XrayInstaller) Install() error {
 	}
 
 	// Save node info to DB
+	existing, _ := x.db.GetNodeInfo()
 	nodeInfo := &db.NodeInfo{
 		ServerIP:   serverIP,
 		XrayPubKey: publicKey,
 		XrayPriKey: privateKey,
 		ShortID:    shortID,
 	}
-	// Preserve existing hy2 fields
-	existing, _ := x.db.GetNodeInfo()
+	
+	// Preserve existing fields (like AdminToken and Hysteria certs)
 	if existing != nil {
+		nodeInfo.AdminToken = existing.AdminToken
 		nodeInfo.Hy2Cert = existing.Hy2Cert
 		nodeInfo.Hy2Key = existing.Hy2Key
+		nodeInfo.ServerIP = existing.ServerIP // Keep original if exists
 	}
+
 	if err := x.db.SaveNodeInfo(nodeInfo); err != nil {
 		return fmt.Errorf("save node info: %w", err)
 	}

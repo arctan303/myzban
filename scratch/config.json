@@ -1,0 +1,7 @@
+{
+  "db_path": "/etc/pnm/pnm.db",
+  "api_listen_addr": "0.0.0.0:9090",
+  "vless_port": 8443,
+  "hy2_port": 443,
+  "dest_domain": "www.bing.com"
+}
